@@ -6,7 +6,7 @@ create table User(
 	birthday date not null,
 	occupation varchar(15),
 	creditcard varchar(25),
-	address varchar(25)
+	address varchar(25) not null
 );
 
 create table Building(
@@ -29,6 +29,7 @@ create table Listing(
 
 create table Amenity(
 	atype varchar(15) primary key,
+	category varchar(15) not null,
     price float(2) not null
 );
 
