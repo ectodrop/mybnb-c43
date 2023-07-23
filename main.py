@@ -21,19 +21,18 @@ def welcome():
 
   choice = input("Enter a choice: ")
 
+  sin = 0
   if choice == "1":
-    name, sin = create_account(connection.cursor())
+    sin = create_account(connection.cursor())
   elif choice == "2":
-    name, sin = login(connection.cursor())
+    sin = login(connection.cursor())
   elif choice == "3":
-    return 0, View.EXIT
+    return sin, View.EXIT
   else:
     print("Invalid entry.")
-    return 0, View.WELCOME
 
   if (sin == 0):
     return 0, View.WELCOME
-  print("Hi, ", name)
   return sin, View.CLIENT_DASH
 
 
@@ -51,7 +50,7 @@ def client_dashboard(sin):
   elif choice == "3":
     return View.HOST_DASH
   elif choice == "4":
-    return logout(sin)
+    return View.WELCOME
   elif choice == "10":
     return delete_account(sin)
   else:
@@ -74,7 +73,7 @@ def host_dashboard(sin):
   elif choice == "4":
     return View.CLIENT_DASH
   elif choice == "5":
-    return logout(sin)
+    return View.WELCOME
   elif choice == "10":
     return delete_account(sin)
   else:

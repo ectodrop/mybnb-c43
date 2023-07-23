@@ -25,11 +25,12 @@ def create_account():
     result = cursor.fetchone()
     if (result.rowcount != 0):
         print("An account with this SIN already exists.")
-        return "", 0
+        return 0
 
     connection.cursor.execute(insert_user, tuple(answers))
     db.commit()
-    return answers[0], answers[1]
+    print ("Hi, ", answers[0])
+    return answers[1]
     
 
 def login():
@@ -48,17 +49,16 @@ def login():
     result = cursor.fetchone()
     if (result.rowcount == 0):
         print ("Incorrect username or password.")
-        return "", 0
-    
-    return result[0], answers[0]
+        return 0
 
-def logout():
-    return View.WeLCOME
+    print("Hi, ", result[0])
+    return answers[0]
+
 
 def delete_account(sin):
 
     # delete bookings, listings, listings availabilities and amenities
-    # or make add another field to User and mark as deleted
+    # or add another field to User and mark as deleted
 
     delete_user = ("DELETE FROM User WHERE sin = %s")
     connection.cursor.execute(delete_user, (sin,))
