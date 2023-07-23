@@ -1,8 +1,9 @@
 DROP TABLE IF EXISTS User, Listing, Building, Amenity, Availability, Booking, ListingAmenities;
 
 create table User(
-	sin varchar(15) primary key,
+	sin int primary key,
 	name varchar(15) not null,
+    password varchar(25) not null
 	birthday date not null,
 	occupation varchar(15),
 	creditcard varchar(25),
