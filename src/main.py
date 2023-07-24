@@ -1,17 +1,8 @@
-from user import *
-import os
-from enum import Enum
-
-class View(Enum):
-  WELCOME = 1
-  CLIENT_DASH = 2
-  HOST_DASH = 3
-  EXIT = 4
-
-
-def clear_screen():
-  os.system("cls")
-
+import user
+import listing
+import notifications
+import utils
+from views import View
 
 def welcome():
   print("Please select an option")
@@ -22,44 +13,46 @@ def welcome():
   choice = input("Enter a choice: ")
 
   if choice == "1":
-    name, sin = create_account(connection.cursor())
+    name, sin = user.create_account()
   elif choice == "2":
-    name, sin = login(connection.cursor())
+    name, sin = user.login()
   elif choice == "3":
     return 0, View.EXIT
   else:
-    print("Invalid entry.")
+    notifications.set_notification("Invalid entry.")
     return 0, View.WELCOME
 
   if (sin == 0):
     return 0, View.WELCOME
-  print("Hi, ", name)
+  notifications.set_notification("Hi, "+ name)
   return sin, View.CLIENT_DASH
 
 
 def client_dashboard(sin):
+  print("RENTER VIEW")
   print("What would you like to do?")
   print("1. Book a listing")
   print("2. Search listings")
   print("3. Switch to host dashboard")
   print("4. Logout")
   print("10. Delete my account")
-  choice = input("")
+  choice = input("Enter a choice: ")
 
   if choice == "1":
     pass
   elif choice == "3":
     return View.HOST_DASH
   elif choice == "4":
-    return logout(sin)
+    return user.logout(sin)
   elif choice == "10":
-    return delete_account(sin)
+    return user.delete_account(sin)
   else:
-    print("Invalid entry.")
+    notifications.set_notification("Invalid entry.")
     return View.CLIENT_DASH
 
 
 def host_dashboard(sin):
+  print("HOST VIEW")
   print("What would you like to do?")
   print("1. Create a listing")
   print("2. Manage a listing")
@@ -67,27 +60,30 @@ def host_dashboard(sin):
   print("4. Switch to client dashboard")
   print("5. Logout")
   print("10. Delete my account")
-  choice = input("")
+  choice = input("Enter a choice: ")
 
   if choice == "1":
-    pass
+    listing.create_listing(sin)
+    return View.HOST_DASH
+  elif choice == "2":
+    listing
   elif choice == "4":
     return View.CLIENT_DASH
   elif choice == "5":
-    return logout(sin)
+    return user.logout(sin)
   elif choice == "10":
-    return delete_account(sin)
+    return user.delete_account(sin)
   else:
-    print("Invalid entry.")
+    notifications.set_notification("Invalid entry.")
     return View.HOST_DASH
 
 
 def main ():
-  logged_in = False
   cur_view = View.WELCOME
-  clear_screen()
+  utils.clear_screen()
   print("Welcome to MyBnB")
   while True:
+    notifications.display_notification()
     if cur_view == View.WELCOME:
       sin, cur_view = welcome()
     elif cur_view == View.CLIENT_DASH:
@@ -96,7 +92,9 @@ def main ():
       cur_view = host_dashboard(sin)
     elif cur_view == View.EXIT:
       break
-    clear_screen()
+    elif cur_view == None:
+      break
+    utils.clear_screen()
 
 
 if __name__ == "__main__":

@@ -1,9 +1,9 @@
-DROP TABLE IF EXISTS User, Listing, Building, Amenity, Availability, Booking, ListingAmenities;
+DROP TABLE IF EXISTS ListingAmenities, Availability, Listing, Booking, User, Building, Amenity;
 
 create table User(
 	sin int primary key,
 	name varchar(15) not null,
-    password varchar(25) not null
+    password varchar(25) not null,
 	birthday date not null,
 	occupation varchar(15),
 	creditcard varchar(25),
@@ -24,8 +24,10 @@ create table Listing(
     city varchar(50) not null,
     country varchar(50) not null,
     zipcode varchar(6) not null,
-    type varchar(15) references Building(type),
-    sin varchar(15) references User(sin)
+    type varchar(15)
+        references Building(type),
+    sin varchar(15)
+        references User(sin)
 );
 
 create table Amenity(
@@ -35,8 +37,10 @@ create table Amenity(
 );
 
 create table ListingAmenities(
-	atype varchar(15) references Amenity(atype),
-    lid int not null references Listing(lid),
+	atype varchar(15)
+        references Amenity(atype),
+    lid int not null
+        references Listing(lid),
     primary key (atype, lid)
 );
 
@@ -49,10 +53,13 @@ create table Availability(
 
 create table Booking(
 	bid int AUTO_INCREMENT primary key,
-	sin varchar(15) references User(sin),
+	sin varchar(15)
+        references User(sin),
     status ENUM('ACTIVE', 'HOST_CANCELLED', 'RENTER_CANCELLED') not null,
-    start_date int references Availability(aid),
-    end_date int references Availability(aid),
+    start_date int
+        references Availability(aid),
+    end_date int
+        references Availability(aid),
     renter_comment text,
     renter_rating int CHECK (renter_rating >= 0 AND renter_rating <= 5),
     host_comment text,
