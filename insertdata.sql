@@ -30,3 +30,12 @@ INSERT INTO Amenity (atype, category, price) VALUES ('Smoke Alarm', 'Safety', 1.
 INSERT INTO Amenity (atype, category, price) VALUES ('First Aid Kit', 'Safety', 1.00);
 INSERT INTO Amenity (atype, category, price) VALUES ('Fire Extinguisher', 'Safety', 1.00);
 INSERT INTO Amenity (atype, category, price) VALUES ('Carbon Monoxide Alarm', 'Safety', 1.00);
+
+INSERT INTO User (sin, name, password, birthday, occupation, address) VALUES
+    (123, 'Test Guy', '123', '1999-12-01', 'Robot', '123 Sesame Ave.');
+
+
+INSERT INTO Listing (longitude, latitude, streetnum, streetname, city, country, zipcode, btype, sin)
+    VALUES (100.0, 100.0, '90', 'Street st.', 'Toronto', 'Canada', '123ABC', 'Apartment', 123);
+INSERT INTO Listing (longitude, latitude, streetnum, streetname, city, country, zipcode, btype, sin)
+    VALUES (101.1423432, 99.123123, '123', 'ABC rd.', 'Toronto', 'Canada', '456DEF', 'House', 123);

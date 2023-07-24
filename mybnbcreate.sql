@@ -24,46 +24,44 @@ create table Listing(
     city varchar(50) not null,
     country varchar(50) not null,
     zipcode varchar(6) not null,
-    type varchar(15)
-        references Building(type),
-    sin varchar(15)
-        references User(sin)
+    btype varchar(15) not null,
+    sin int not null,
+    FOREIGN KEY (btype) REFERENCES Building(btype) ON DELETE CASCADE,
+    FOREIGN KEY (sin) REFERENCES User(sin) ON DELETE CASCADE
 );
 
 create table Amenity(
-	atype varchar(15) primary key,
+	atype varchar(50) primary key,
 	category varchar(15) not null,
     price float(2) not null
 );
 
 create table ListingAmenities(
-	atype varchar(15)
-        references Amenity(atype),
-    lid int not null
-        references Listing(lid),
-    primary key (atype, lid)
+	atype varchar(50),
+    lid int not null,
+    PRIMARY KEY (atype, lid),
+    FOREIGN KEY (lid) REFERENCES Listing(lid) ON DELETE CASCADE
 );
 
 create table Availability(
-	aid int AUTO_INCREMENT primary key,
 	date date not null,
+	lid int not null,
     price float(2) not null,
-	lid int references Listing(lid)
+    PRIMARY KEY (date, lid),
+    FOREIGN KEY (lid) REFERENCES Listing(lid) ON DELETE CASCADE
 );
 
 create table Booking(
 	bid int AUTO_INCREMENT primary key,
-	sin varchar(15)
-        references User(sin),
+	sin int not null,
+	lid int not null,
     status ENUM('ACTIVE', 'HOST_CANCELLED', 'RENTER_CANCELLED') not null,
-    start_date int
-        references Availability(aid),
-    end_date int
-        references Availability(aid),
+    start_date date not null,
+    end_date date not null,
     renter_comment text,
     renter_rating int CHECK (renter_rating >= 0 AND renter_rating <= 5),
     host_comment text,
-    host_rating int CHECK (host_rating >= 0 AND host_rating <= 5)
+    host_rating int CHECK (host_rating >= 0 AND host_rating <= 5),
+    FOREIGN KEY (sin) REFERENCES User(sin) ON DELETE CASCADE,
+    FOREIGN KEY (lid) REFERENCES Listing(lid) ON DELETE CASCADE
 );
-
-
