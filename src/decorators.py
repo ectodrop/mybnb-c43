@@ -1,4 +1,5 @@
 import notifications
+import traceback
 
 def error_notif(default=None):
     def _error_notif(func):
@@ -6,7 +7,7 @@ def error_notif(default=None):
             try:
                 return func(*args, **kwargs) 
             except Exception as e:
-                notifications.set_notification(str(e))
+                notifications.set_notification(traceback.format_exc())
                 return default
         return wrapper
     return _error_notif

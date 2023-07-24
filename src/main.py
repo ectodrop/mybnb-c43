@@ -65,7 +65,7 @@ def host_dashboard(sin):
     listing.create_listing(sin)
     return View.HOST_DASH
   elif choice == "2":
-    listing
+    return View.SELECT_LISTING
   elif choice == "4":
     return View.CLIENT_DASH
   elif choice == "5":
@@ -77,25 +77,59 @@ def host_dashboard(sin):
     notifications.set_notification("Invalid entry.")
     return View.HOST_DASH
 
+def manage_listing(lid):
+  print("Options for listing#" + lid)
+  print("1. Add availablity")
+  print("2. Adjust pricing")
+  print("3. View bookings")
+  print("4. Cancel booking")
+  print("5. Return to host menu")
+  choice = input("Enter a choice: ")
+
+  if choice == "1":
+    listing.add_availablity(lid)
+  elif choice == "2":
+    listing.update_pricing(lid)
+  elif choice == "3":
+    listing.display_bookings(lid)
+  elif choice == "4":
+    listing.cancel_booking(lid)
+  else:
+    return View.HOST_DASH
+  return View.LISTING
 
 def main ():
   cur_view = View.WELCOME
   utils.clear_screen()
-  print("Welcome to MyBnB")
+  notifications.set_notification("Welcome To MyBnB!")
   while True:
+    utils.clear_screen()
     notifications.display_notification()
     if cur_view == View.WELCOME:
       sin, cur_view = welcome()
+    
     elif cur_view == View.CLIENT_DASH:
       cur_view = client_dashboard(sin)
+    
     elif cur_view == View.HOST_DASH:
       cur_view = host_dashboard(sin)
+    
+    elif cur_view == View.SELECT_LISTING:
+      lid = listing.select_listing(sin)
+      if lid == 0:
+        cur_view = View.HOST_DASH
+      else:
+        cur_view = View.LISTING
+    
+    elif cur_view == View.LISTING:
+      cur_view = manage_listing(lid)
+    
     elif cur_view == View.EXIT:
       break
+
     elif cur_view == None:
       break
-    utils.clear_screen()
-
+  print("Goodbye")
 
 if __name__ == "__main__":
   main()
