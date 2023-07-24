@@ -11,20 +11,18 @@ def welcome():
   print("3. Exit")
 
   choice = input("Enter a choice: ")
-
+  sin = 0
   if choice == "1":
-    name, sin = user.create_account()
+    sin = user.create_account()
   elif choice == "2":
-    name, sin = user.login()
+    sin = user.login()
   elif choice == "3":
     return 0, View.EXIT
   else:
     notifications.set_notification("Invalid entry.")
-    return 0, View.WELCOME
 
   if (sin == 0):
     return 0, View.WELCOME
-  notifications.set_notification("Hi, "+ name)
   return sin, View.CLIENT_DASH
 
 
@@ -43,9 +41,10 @@ def client_dashboard(sin):
   elif choice == "3":
     return View.HOST_DASH
   elif choice == "4":
-    return user.logout(sin)
+    return View.WELCOME
   elif choice == "10":
-    return user.delete_account(sin)
+    user.delete_account(sin)
+    return View.WELCOME
   else:
     notifications.set_notification("Invalid entry.")
     return View.CLIENT_DASH
@@ -70,9 +69,10 @@ def host_dashboard(sin):
   elif choice == "4":
     return View.CLIENT_DASH
   elif choice == "5":
-    return user.logout(sin)
+    return View.WELCOME
   elif choice == "10":
-    return user.delete_account(sin)
+    user.delete_account(sin)
+    return View.WELCOME
   else:
     notifications.set_notification("Invalid entry.")
     return View.HOST_DASH
