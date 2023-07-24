@@ -4,7 +4,7 @@ import notifications
 _connection = mysql.connector.connect(
   host="localhost",
   user="root",
-  password="",
+  password="password1234",
   database="mybnb"
 )
 
