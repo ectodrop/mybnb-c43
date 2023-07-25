@@ -1,5 +1,6 @@
 import user
 import listing
+import booking
 import notifications
 import utils
 from views import View
@@ -30,24 +31,33 @@ def client_dashboard(sin):
   print("RENTER VIEW")
   print("What would you like to do?")
   print("1. Book a listing")
-  print("2. Search listings")
-  print("3. Switch to host dashboard")
-  print("4. Logout")
+  print("2. Browse listings")
+  print("3. View my future bookings")
+  print("4. View my bookings history")
+  print("5. Switch to host dashboard")
+  print("6. Logout")
   print("10. Delete my account")
   choice = input("Enter a choice: ")
 
   if choice == "1":
-    pass
+    booking.create_booking(sin)
+  elif choice == "2":
+    booking.browse_listings(sin)
   elif choice == "3":
-    return View.HOST_DASH
+    booking.future_bookings(sin)
   elif choice == "4":
+    booking.past_bookings(sin)
+  elif choice == "5":
+    return View.HOST_DASH
+  elif choice == "6":
     return View.WELCOME
   elif choice == "10":
     user.delete_account(sin)
     return View.WELCOME
   else:
     notifications.set_notification("Invalid entry.")
-    return View.CLIENT_DASH
+  
+  return View.CLIENT_DASH
 
 
 def host_dashboard(sin):

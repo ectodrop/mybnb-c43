@@ -63,7 +63,7 @@ create table Booking(
     renter_listing_rating int CHECK (renter_listing_rating >= 1 AND renter_listing_rating <= 5),
     renter_listing_comment text,
     host_comment text,
-    host_rating int CHECK (host_rating >= 0 AND host_rating <= 5),
+    host_rating int CHECK (host_rating >= 1 AND host_rating <= 5),
     FOREIGN KEY (sin) REFERENCES User(sin) ON DELETE CASCADE,
     FOREIGN KEY (lid) REFERENCES Listing(lid) ON DELETE CASCADE
 );

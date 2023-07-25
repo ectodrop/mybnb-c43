@@ -34,6 +34,14 @@ INSERT INTO Amenity (atype, category, price) VALUES ('Carbon Monoxide Alarm', 'S
 INSERT INTO User (sin, name, password, birthday, occupation, address) VALUES
     (123, 'Test Guy', '123', '1999-12-01', 'Robot', '123 Sesame Ave.');
 
+INSERT INTO User (sin, name, password, birthday, occupation, address) VALUES
+    (124, 'Test Guy2', '124', '1999-12-01', 'Robot', '123 Sesame Ave.');
+
+INSERT INTO Booking (sin, bid, lid, status, start_date, end_date)
+    VALUES (124, 1, 1, 'ACTIVE', '2023-08-21', '2023-08-25');
+
+INSERT INTO Booking (sin, bid, lid, status, start_date, end_date)
+    VALUES (124, 2, 1, 'ACTIVE', '2023-08-21', '2023-08-25');
 
 INSERT INTO Listing (longitude, latitude, streetnum, streetname, city, country, zipcode, btype, sin)
     VALUES (100.0, 100.0, '90', 'Street st.', 'Toronto', 'Canada', '123ABC', 'Apartment', 123);
