@@ -4,7 +4,7 @@ import notifications
 import utils
 from decorators import error_notif
 
-@error_notif(default=(0))
+@error_notif(default=0)
 def create_account():
     questions = [
         "Enter your name: ",
@@ -38,7 +38,7 @@ def create_account():
     notifications.set_notification("Hi,"+ answers[0])
     return answers[1]
 
-@error_notif(default=(0))
+@error_notif(default=0)
 def login():
     select_user = ("SELECT name FROM User WHERE sin = %s AND password = %s")
     questions = [
