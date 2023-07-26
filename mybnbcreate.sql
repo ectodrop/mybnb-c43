@@ -55,7 +55,7 @@ create table Booking(
 	bid int AUTO_INCREMENT primary key,
 	sin int not null,
 	lid int not null,
-    status ENUM('ACTIVE', 'HOST_CANCELLED', 'RENTER_CANCELLED') not null,
+    status ENUM('ACTIVE', 'HOST_CANCELLED', 'RENTER_CANCELLED') not null DEFAULT 'ACTIVE',
     start_date date not null,
     end_date date not null,
     renter_host_rating int CHECK (renter_host_rating >= 1 AND renter_host_rating <= 5),

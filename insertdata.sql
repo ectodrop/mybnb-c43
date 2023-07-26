@@ -39,3 +39,11 @@ INSERT INTO Listing (longitude, latitude, streetnum, streetname, city, country, 
     VALUES (100.0, 100.0, '90', 'Street st.', 'Toronto', 'Canada', '123ABC', 'Apartment', 123);
 INSERT INTO Listing (longitude, latitude, streetnum, streetname, city, country, zipcode, btype, sin)
     VALUES (101.1423432, 99.123123, '123', 'ABC rd.', 'Toronto', 'Canada', '456DEF', 'House', 123);
+
+INSERT INTO Availability (date, lid, price) VALUES ('2023-07-24', 1, 10.0);
+INSERT INTO Availability (date, lid, price) VALUES ('2023-07-25', 1, 10.0);
+INSERT INTO Availability (date, lid, price) VALUES ('2023-07-26', 1, 10.0);
+INSERT INTO Availability (date, lid, price) VALUES ('2023-07-27', 1, 10.0);
+INSERT INTO Availability (date, lid, price) VALUES ('2023-07-28', 1, 10.0);
+
+INSERT INTO Booking (sin, lid, start_date, end_date) VALUES (123, 1, '2023-07-26', '2023-07-27');

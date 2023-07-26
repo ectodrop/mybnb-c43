@@ -66,6 +66,10 @@ def host_dashboard(sin):
     return View.HOST_DASH
   elif choice == "2":
     return View.SELECT_LISTING
+  elif choice == "3":
+    listing.display_listings(sin)
+    input("Press 'Enter' to continue")
+    return View.HOST_DASH
   elif choice == "4":
     return View.CLIENT_DASH
   elif choice == "5":
@@ -81,21 +85,27 @@ def manage_listing(lid):
   print("Options for listing#" + lid)
   print("1. Add availablity")
   print("2. Adjust pricing")
-  print("3. View bookings")
-  print("4. Cancel booking")
-  print("5. Return to host menu")
+  print("3. Remove availability")
+  print("4. View bookings")
+  print("5. Cancel booking")
+  print("6. Return to host menu")
   choice = input("Enter a choice: ")
 
   if choice == "1":
-    listing.add_availablity(lid)
+    listing.update_availablity(lid, remove=False)
   elif choice == "2":
-    listing.update_pricing(lid)
+    listing.update_price(lid)
   elif choice == "3":
-    listing.display_bookings(lid)
+    listing.update_availablity(lid, remove=True)
   elif choice == "4":
-    listing.cancel_booking(lid)
-  else:
+    listing.display_bookings(lid)
+    input("Press Enter to continue ")
+  elif choice == "5":
+    listing.host_cancel_booking(lid)
+  elif choice == "6":
     return View.HOST_DASH
+  else:
+    notifications.set_notification("Invalid entry")
   return View.LISTING
 
 def main ():
