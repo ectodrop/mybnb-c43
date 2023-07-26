@@ -31,25 +31,22 @@ def client_dashboard(sin):
   print("RENTER VIEW")
   print("What would you like to do?")
   print("1. Book a listing")
-  print("2. Browse listings")
-  print("3. View my future bookings")
-  print("4. View my bookings history")
-  print("5. Switch to host dashboard")
-  print("6. Logout")
+  print("2. View my future bookings")
+  print("3. View my bookings history")
+  print("4. Switch to host dashboard")
+  print("5. Logout")
   print("10. Delete my account")
   choice = input("Enter a choice: ")
 
   if choice == "1":
-    booking.create_booking(sin)
-  elif choice == "2":
     booking.browse_listings(sin)
-  elif choice == "3":
+  elif choice == "2":
     booking.future_bookings(sin)
-  elif choice == "4":
+  elif choice == "3":
     booking.past_bookings(sin)
-  elif choice == "5":
+  elif choice == "4":
     return View.HOST_DASH
-  elif choice == "6":
+  elif choice == "5":
     return View.WELCOME
   elif choice == "10":
     user.delete_account(sin)
