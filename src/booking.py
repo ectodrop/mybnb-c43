@@ -3,7 +3,7 @@ import notifications
 import utils
 from decorators import error_notif
 from views import View
-from datetime import date
+from datetime import date, timedelta
 
 
 @error_notif()
@@ -35,41 +35,91 @@ def listing_options(sin, valid_ids):
     if (int(lid) not in valid_ids):
         notifications.set_notification("Listing ID not present in search results. Please try again.")
     else:
+        print("Listing Information")
         listing_info(sin, lid)
 
 
 @error_notif()
-def display_listings(get_listings, answers):
+def display_listings(get_listings, answers, show_distance):
     cursor = db.get_new_cursor()
     cursor.execute(get_listings, tuple(answers))
     result = cursor.fetchall()
 
     print("AVAILABLE LISTINGS")
-    if (result):
-        print(f"{'ID':5}{'Host Name':15}{'Street #':10}{'Street Name':15}{'City':15}{'Country':15}{'Zipcode':10}{'Type':15}")
+    if (result and show_distance):
+        print(f"{'ID':5}{'Host Name':15}{'Street #':10}{'Street Name':15}{'City':15}{'Country':15}{'Zipcode':10}{'Type':15}{'Avg Price/Day':15}{'Min Price/Day':15}{'Max Price/Day':15}{'Distance':8}")
+    elif (result):
+        print(f"{'ID':5}{'Host Name':15}{'Street #':10}{'Street Name':15}{'City':15}{'Country':15}{'Zipcode':10}{'Type':15}{'Avg Price/Day':15}{'Min Price/Day':15}{'Max Price/Day':15}")
     else:
         print("...No available listings found!...")
 
     valid_ids = set()
     for row in result:
-        (lid, streetnum, streetname, city, country, zipcode, btype, name) = row
+        if (show_distance):
+            (lid, streetnum, streetname, city, country, zipcode, btype, name, avg, min, max, distance) = row
+            print(f"{lid:<5}{name:15}{streetnum:10}{streetname:15}{city:15}{country:15}{zipcode:10}{btype:15}{round(avg, 2):<15}{round(min, 2):<15}{round(max, 2):<15}{round(distance, 2):8}")
+        else:
+            (lid, streetnum, streetname, city, country, zipcode, btype, name, avg, min, max) = row
+            print(f"{lid:<5}{name:15}{streetnum:10}{streetname:15}{city:15}{country:15}{zipcode:10}{btype:15}{round(avg, 2):<15}{round(min, 2):<15}{round(max, 2):<15}")
         valid_ids.add(lid)
-        print(f"{lid:<5}{name:15}{streetnum:10}{streetname:15}{city:15}{country:15}{zipcode:10}{btype:15}")
     return valid_ids
 
 
 @error_notif()
-def filter_search():
-    print("Filter by price range? ")
-    choice = input("Input (y/n): ")
-    print("Filter by amenities offered? ")
-    choice = input("Input (y/n): ")
-    print("Filter by availability dates? ")
-    choice = input("Input (y/n): ")
+def filter_search(search_query, answers):
+    additional_query = "date >= %s"
+    additional_params = answers
+    choice = input("Filter by availability? Input (y/n): ")
+    if (choice == "y"):
+        questions = ["Enter the start date of availabilities (YYYY-MM-DD): ", "Enter the end date of availabilities (YYYY-MM-DD): "]
+        dates = utils.display_form(questions)
+        additional_query += " AND date <= %s"
+        additional_params = dates
+    elif (choice != "n"):
+        print("Invalid entry.")
+
+    choice = input("Filter by price? Input (y/n): ")
+    if (choice == "y"):
+        questions = ["Enter the minimum price per day: ", "Enter the maximum price per day: "]
+        [min_price, max_price] = utils.display_form(questions)
+        additional_query += " AND price >= %s AND price <= %s"
+        additional_params += [float(min_price), float(max_price)]
+    elif (choice != "n"):
+        print("Invalid entry.")
+
+    search_query[3] = additional_query
+    return additional_params
 
 
 @error_notif()
-def search_by_addr(sin, get_listings, answers):
+def search_loop(sin, search_query, params, for_distance):
+    sorted = False
+    while(True):
+        get_listings = " ".join(search_query)
+        valid_ids = display_listings(get_listings, params, for_distance)
+        print("Please select an option: ")
+        print("1. Return to browsing all listings")
+        if (valid_ids):
+            print("2. View details of a listing")
+            print("3. Order listings by average price")
+        choice = input("Enter a choice: ")
+        if choice == "2" and valid_ids:
+            listing_options(sin, valid_ids)
+        elif choice == "1":
+            notifications.set_notification("Search completed.")
+            return
+        elif choice == "3" and valid_ids:
+            sorted = sort_by_price(search_query, sorted)
+        else:
+            notifications.set_notification("Invalid entry.")
+        utils.clear_screen()
+        notifications.display_notification()
+
+
+@error_notif()
+def search_by_addr(sin, answers):
+    utils.clear_screen()
+    print("Searching by Address")
     questions = [
         "Enter the street #: ",
         "Enter the street name: ",
@@ -77,107 +127,99 @@ def search_by_addr(sin, get_listings, answers):
         "Enter the country: ",
         "Enter the zipcode: "
     ]
-    answers += utils.display_form(questions)
-    get_listings += " AND streetnum = %s AND streetname = %s AND city = %s AND country = %s AND zipcode = %s"
-    #filter_search()
-
-    while(True):
-        valid_ids = display_listings(get_listings, answers)
-        if (len(valid_ids) == 1):
-            listing_info(sin, list(valid_ids)[0])
-            notifications.set_notification("Search completed.")
-            return
-        else:
-            print("Please select an option: ")
-            print("1. Return to browsing all listings")
-            if (valid_ids):
-                print("2. View details of a listing")
-            choice = input("Enter a choice: ")
-            if choice == "2" and valid_ids:
-                listing_options(sin, valid_ids)
-            elif choice == "1":
-                notifications.set_notification("Search completed.")
-                return
-            else:
-                notifications.set_notification("Invalid entry.")
-        utils.clear_screen()
-        notifications.display_notification()
+    params = utils.display_form(questions)
+    search_query = ["SELECT lid, streetnum, streetname, city, country, zipcode, btype, name, avg, min, max FROM",
+                    "(SELECT * FROM Listing NATURAL JOIN User WHERE streetnum = %s AND streetname = %s AND city = %s AND country = %s AND zipcode = %s) AS S NATURAL JOIN",
+                    "(SELECT lid, avg(price) AS avg, min(price) AS min, max(price) AS max FROM (SELECT * from Availability WHERE",
+                    "date >= %s",
+                    ") AS R GROUP BY lid) AS T",
+                ]
+    params += filter_search(search_query, answers)
+    search_loop(sin, search_query, params, False)
 
 
 @error_notif()
-def search_by_zipcode(sin, get_listings, answers):
+def search_by_zipcode(sin, answers):
+    utils.clear_screen()
+    print("Searching by Zipcode")
     questions = [
         "Enter a zipcode: "
     ]
     [zipcode] = utils.display_form(questions)
-    answers.append(zipcode[:3])
-    get_listings += ''' AND zipcode LIKE %s"___"'''
-    #filter_search()
-    while(True):
-        valid_ids = display_listings(get_listings, answers)
-        print("Please select an option: ")
-        print("1. Return to browsing all listings")
-        if (valid_ids):
-            print("2. View details of a listing")
-        choice = input("Enter a choice: ")
-        if choice == "2" and valid_ids:
-            listing_options(sin, valid_ids)
-        elif choice == "1":
-            notifications.set_notification("Search completed.")
-            return
-        else:
-            notifications.set_notification("Invalid entry.")
-        utils.clear_screen()
-        notifications.display_notification()
+    search_query = ["SELECT lid, streetnum, streetname, city, country, zipcode, btype, name, avg, min, max FROM",
+                    '''(SELECT * FROM Listing NATURAL JOIN User WHERE zipcode like %s"___") AS S NATURAL JOIN''',
+                    "(SELECT lid, avg(price) AS avg, min(price) AS min, max(price) AS max FROM (SELECT * from Availability WHERE",
+                    "date >= %s",
+                    ") AS R GROUP BY lid) AS T"
+                ]
+    params = [zipcode[:3]]
+    params += filter_search(search_query, answers)
+    search_loop(sin, search_query, params, False)
         
 
 @error_notif()
 def search_by_location(sin, answers):
+    utils.clear_screen()
+    print("Searching by Location")
     questions = [
         "Enter a longitude: ",
         "Enter a latitude: ",
-        "Enter a radius of search (leave blank for a default of 10): "
+        "Enter a radius of search (leave blank for a default of 50 km): "
     ]
     [longi, lati, dist] = utils.display_form(questions)
-    dist_params = [int(longi), int(lati), int(dist) if dist else 10 ]
-    get_listings = ("SELECT lid, streetnum, streetname, city, country, zipcode, btype, name FROM "
-                    "(SELECT DISTINCT lid, streetnum, streetname, city, country, zipcode, btype, name,"
-                    " SQRT(POWER(longitude - %s, 2) + POWER(latitude - %s, 2)) AS distance FROM"
-                    " Availability NATURAL JOIN Listing NATURAL JOIN User WHERE date > %s) AS R WHERE distance <= %s"
-                    " ORDER BY distance ASC")
-    #filter_search
-    params = dist_params[:2] + answers + [dist_params[2]]
-    # sort by price
-    while(True):
-        valid_ids = display_listings(get_listings, params)
-        print("Please select an option: ")
-        print("1. Return to browsing all listings")
-        if (valid_ids):
-            print("2. View details of a listing")
-        choice = input("Enter a choice: ")
-        if choice == "2" and valid_ids:
-            listing_options(sin, valid_ids)
-        elif choice == "1":
-            notifications.set_notification("Search completed.")
-            return
-        else:
-            notifications.set_notification("Invalid entry.")
-        utils.clear_screen()
-        notifications.display_notification()
+    dist_params = [float(lati), float(lati), float(longi), float(dist) if dist else 50.0 ]
+    search_query = ["SELECT lid, streetnum, streetname, city, country, zipcode, btype, name, avg, min, max, 12742*temp*sin(SQRT(temp)) AS distance FROM",
+                    "(SELECT lid, streetnum, streetname, city, country, zipcode, btype, name, POWER(sin((latitude - %s)/2), 2) + cos(latitude)*cos(%s)*POWER(sin((longitude - %s)/2), 2) AS temp FROM Listing NATURAL JOIN User) AS S NATURAL JOIN",
+                    "(SELECT lid, avg(price) AS avg, min(price) AS min, max(price) AS max FROM (SELECT * from Availability WHERE",
+                    "date >= %s",
+                    ") AS R GROUP BY lid) AS T",
+                    "WHERE 12742*temp*sin(SQRT(temp)) <= %s"
+                ]
+    params = dist_params[:3]
+    params += filter_search(search_query, answers)
+    params.append(dist_params[3])
+    search_loop(sin, search_query, params, True)
 
+
+@error_notif()
+def sort_by_price(search_query, sorted):
+    utils.clear_screen()
+    print("Please select an option: ")
+    print("1. Show highest average price first")
+    print("2. Show lowest average price first")
+    choice = input("Enter a choice: ")
+    if choice == "1":
+        if not sorted:
+            search_query.append("ORDER BY avg DESC")
+            sorted = True
+        else:
+            search_query[-1] = "ORDER BY avg DESC"
+            notifications.set_notification("Sorting by highest average price first.")
+    elif choice == "2":
+        if not sorted:
+            search_query.append("ORDER BY avg ASC")
+            sorted = True
+        else:
+            search_query[-1] = "ORDER BY avg ASC"
+            notifications.set_notification("Sorting by lowest average price first.")
+    else:
+        notifications.set_notification("Invalid entry.")
+    return sorted
 
 @error_notif()
 def browse_listings(sin):
     utils.clear_screen()
-    get_listings = ("SELECT DISTINCT lid, streetnum, streetname, city, country, zipcode, btype, name"
-                    " FROM Availability NATURAL JOIN Listing NATURAL JOIN User WHERE date > %s")
-    curr_date = date.today()
+    search_query = ["SELECT DISTINCT lid, streetnum, streetname, city, country, zipcode, btype, name, avg, min, max FROM",
+                    "(SELECT * FROM Listing NATURAL JOIN User) AS S NATURAL JOIN",
+                    "(SELECT lid, avg(price) AS avg, min(price) AS min, max(price) AS max FROM (SELECT * from Availability WHERE date >= %s) AS R GROUP BY lid) AS T",
+                ]
+    tmr_date = date.today() + timedelta(1)
+    sorted = False
     while (True):
         print("Browse and Book Listings")
-        get_listings = ("SELECT DISTINCT lid, streetnum, streetname, city, country, zipcode, btype, name"
-                    " FROM Availability NATURAL JOIN Listing NATURAL JOIN User WHERE date > %s")
-        answers = [curr_date]
-        valid_ids = display_listings(get_listings, answers)
+        get_listings = " ".join(search_query)
+        answers = [tmr_date]
+        valid_ids = display_listings(get_listings, answers, False)
         print("Please select an option: ")
         print("1. Return to dashboard")
         if (valid_ids):
@@ -185,6 +227,7 @@ def browse_listings(sin):
             print("3. Search by longitude/latitude")
             print("4. Search listings with similar zipcodes")
             print("5. Search for listing by address")
+            print("6. Order listings by average price")
         choice = input("Enter a choice: ")
 
         if choice == "2" and valid_ids:
@@ -192,9 +235,11 @@ def browse_listings(sin):
         elif choice == "3" and valid_ids:
             search_by_location(sin, answers)
         elif choice == "4" and valid_ids:
-            search_by_zipcode(sin, get_listings, answers)
+            search_by_zipcode(sin, answers)
         elif choice == "5" and valid_ids:
-            search_by_addr(sin, get_listings, answers)
+            search_by_addr(sin, answers)
+        elif choice == "6" and valid_ids:
+            sorted = sort_by_price(search_query, sorted)
         elif choice == "1":
             return
         else:
@@ -211,7 +256,11 @@ def print_listing_amenities(lid):
         print(categories[i], "AMENITIES:")
         cursor = db.get_new_cursor()
         cursor.execute(get_listing_amenities, (lid, categories[i]))
-        for row in cursor.fetchall():
+        result = cursor.fetchall()
+        if (not result):
+            print("......None......")
+            continue
+        for row in result:
             print("   -  ", row[0])
 
 
