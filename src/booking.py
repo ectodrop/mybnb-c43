@@ -279,7 +279,7 @@ def browse_listings(sin):
         elif choice == "5" and valid_ids:
             search_by_addr(sin, answers)
         elif choice == "6" and valid_ids:
-            sorted = sort_by_price(search_query, sorted)
+            sorted = sort_by_price(search_query, sorted, False)
         elif choice == "1":
             return
         else:
