@@ -61,10 +61,16 @@ def login():
 @error_notif()
 def delete_account(sin):
 
-    # delete bookings, listings, listings availabilities and amenities
-    # or make another field to User and mark as deleted
+    print("Confirm deletion of account?")
+    choice = input("Input (y/n): ")
+    if (choice == "n"):
+        notifications.set_notification("Did not delete account.")
+        return
+    elif (choice != "y"):
+        notifications.set_notification("Invalid entry.")
+        return
 
     delete_user = ("DELETE FROM User WHERE sin = %s")
     db.get_new_cursor().execute(delete_user, (sin,))
     db.get_connection().commit()
-
+    notifications.set_notification("Account deleted.")

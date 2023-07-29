@@ -4,13 +4,72 @@ import utils
 from decorators import error_notif
 from views import View
 from datetime import date, timedelta
+from listing import get_bookings_dates, get_available_dates, is_booked, is_available
+import windows
 
 
 @error_notif()
 def create_booking(sin, lid):
-    # display availabilities
-    # book some availabilities
-    pass
+    bookings = get_bookings_dates(lid)
+    availabilities = get_available_dates(lid)
+    (start_date, end_date) = windows.display_calendar(bookings, availabilities)
+
+    if not start_date or not end_date:
+        notifications.set_notification("The booking was not made.")
+        return
+    
+    if utils.str_to_date(start_date) > utils.str_to_date(end_date):
+        notifications.set_notification("The booking start date cannot come after the booking end date.")
+        return
+
+    if is_booked(lid, start_date, end_date):
+        notifications.set_notification("This listing is already booked on these days. Please create another booking.")
+        return
+    
+    if not is_available(lid, start_date, end_date):
+        notifications.set_notification("This listing is not available on one or more of the dates selected. Please create another booking.")
+        return
+    
+    utils.clear_screen()
+    get_price = ("SELECT sum(price) FROM Availability WHERE date >= %s AND date <= %s")
+    cursor = db.get_new_cursor()
+    cursor.execute(get_price, (start_date, end_date))
+    (price,) = cursor.fetchone()
+
+    print("Total price of booking: $" + str(price))
+    print("Confirm booking of this listing from " + start_date + " to " + end_date + "?")
+    choice = input("Enter (y/n): ")
+    if choice == "n":
+        notifications.set_notification("Booking failed.")
+        return
+    elif choice != "y":
+        notifications.set_notification("Invalid entry.")
+        return
+
+    retrieve_user = ("SELECT creditcard from User WHERE sin = %s")
+    cursor = db.get_new_cursor()
+    cursor.execute(retrieve_user, (sin,))
+    (creditcard,) = cursor.fetchone()
+    not_present = not creditcard
+
+    while not creditcard:
+        print("Please enter your credit card number: ")
+        creditcard = input("Credit Card Number : ")
+    print(creditcard)
+    update_user = ("UPDATE User SET creditcard = %s WHERE sin = %s")
+    cursor = db.get_new_cursor()
+    cursor.execute(update_user, (int(creditcard), sin))
+    db.get_connection().commit()
+
+    if not_present:
+        print("Credit card number saved successfully.")
+    print("Payment of $" + str(price) + "made for booking.")
+    insert_booking = ("INSERT INTO Booking(sin, lid, status, start_date, end_date) VALUES(%s, %s, %s, %s, %s)")
+    params = (sin, lid, 'ACTIVE', start_date, end_date)
+    cursor = db.get_new_cursor()
+    cursor.execute(insert_booking, params)
+    db.get_connection().commit()
+    notifications.set_notification("Booking created successfully.")
 
 
 @error_notif()
@@ -48,7 +107,7 @@ def listing_options(sin, valid_ids):
         notifications.set_notification("Listing ID not present in search results. Please try again.")
     else:
         print("Listing Information")
-        listing_info(sin, lid)
+        listing_info(sin, int(lid))
 
 
 @error_notif()
@@ -108,6 +167,9 @@ def filter_search(search_query, answers, for_distance):
         while choice != 0 and choice <= len(amenities):
             selected.append(amenities[choice - 1])
             choice = int(input("Select amenities (enter 0 to submit the list): "))
+        if (choice > len(amenities)):
+            print("Invalid entry.")
+
         if selected:
             division_query = ("SELECT DISTINCT x.lid FROM ListingAmenities AS x WHERE NOT EXISTS "
                               "(SELECT * FROM (SELECT atype from Amenity WHERE atype in " + str(tuple(selected)) +
@@ -253,7 +315,7 @@ def browse_listings(sin):
                     "(SELECT * FROM Listing NATURAL JOIN User) AS S NATURAL JOIN",
                     "(SELECT lid, avg(price) AS avg, min(price) AS min, max(price) AS max FROM (SELECT * from Availability WHERE date >= %s) AS R GROUP BY lid) AS T",
                 ]
-    tmr_date = date.today() + timedelta(1)
+    tmr_date = utils.date_to_str(date.today() + timedelta(1))
     sorted = False
     while (True):
         print("Browse and Book Listings")
@@ -306,7 +368,7 @@ def print_listing_amenities(lid):
 
 @error_notif()
 def display_bookings(sin, is_past):
-    curr_date = date.today()
+    curr_date = utils.date_to_str(date.today())
     get_bookings = ("SELECT bid, start_date, end_date, name, streetnum, streetname, city, country, zipcode, btype" +
                     " from Listing NATURAL JOIN User NATURAL JOIN (SELECT bid, lid, sin AS rsin, start_date, end_date from Booking WHERE sin = %s" +
                     " AND status = 'ACTIVE' AND start_date")
@@ -350,9 +412,9 @@ def cancel_booking(valid_ids):
         if (choice != "y"):
             notifications.set_notification("Did not cancel booking.")
             return
-        cancel_booking = ("UPDATE Booking SET status = 'RENTER_CANCELLED' WHERE bid = %s")
+        cancel_booking = ("UPDATE Booking SET status = %s WHERE bid = %s")
         cursor = db.get_new_cursor()
-        cursor.execute(cancel_booking, (int(bid),))
+        cursor.execute(cancel_booking, ('RENTER_CANCELLED', int(bid)))
         db.get_connection().commit()
         notifications.set_notification("Booking cancelled successfully.")
 
@@ -395,21 +457,19 @@ def confirm_responses(responses, bid, existing_review):
         print("Replace new", types[i], "with previous", types[i] + "?")
         choice = input("Input (y/n): ")
         if (choice == "y"):
-            params += responses[i]
+            params.append(responses[i])
         elif (choice == "n"):
-            params += existing_review[i]
+            params.append(existing_review[i])
         else:
             notifications.set_notification("Invalid entry.")
             return
-
-    params += int(bid)
-    return params
+    return [int(params[0]) if params[0] else None, params[1] if params[1] else None, int(bid)]
 
 
 @error_notif()
 def post_review(valid_ids):
     questions = [
-        "Enter a booking id: ",
+        "Enter a booking ID: ",
         "Enter a rating from 1 to 5 (leave blank for none): ",
         "Enter a comment (leave blank for none): "
     ]
@@ -438,15 +498,21 @@ def post_review(valid_ids):
         choice = input("Enter a choice: ")
         if choice == "1":
             update_review = ("UPDATE Booking SET renter_host_rating = %s, renter_host_comment = %s WHERE bid = %s")
-            existing_review = (listing_rating, lising_comment)
+            existing_review = (host_rating, host_comment)
         elif choice == "2":
             update_review = ("UPDATE Booking SET renter_listing_rating = %s, renter_listing_comment = %s WHERE bid = %s")
-            existing_review = (host_rating, host_comment)
+            existing_review = (listing_rating, listing_comment)
         else:
             notifications.set_notification("Invalid entry.")
             return
 
-        params = confirm_responses(utils.display_form(questions[1:]), bid, existing_review)
+
+        rating = 0
+        while rating > 5 or rating < 1:
+            rating = int(input(questions[1]))
+        comment = input(questions[2])
+
+        params = confirm_responses([rating, comment], bid, existing_review)
 
         cursor = db.get_new_cursor()
         cursor.execute(update_review, params)
