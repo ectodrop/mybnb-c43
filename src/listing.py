@@ -275,6 +275,31 @@ def host_cancel_booking(lid):
     db.get_connection().commit()
     notifications.set_notification(f"Successfully cancelled booking#{id}")
 
+
+@error_notif()
+def remove_listing(lid):
+    bookings = (f"SELECT bid FROM Booking WHERE lid = {lid}")
+    cursor = db.get_new_cursor()
+    cursor.execute(bookings)
+    result = cursor.fetchall()
+    
+    if result:
+        notifications.set_notification("Cannot delete a listing with active bookings.")
+        return View.LISTING
+    else:
+        print("Confirm deletion of listing: ")
+        choice = input("Input (y/n): ")
+        if (choice != "y"):
+            notifications.set_notification("Did not remove listing.")
+            return View.LISTING
+        remove_listing = (f"DELETE FROM Listing WHERE lid = {lid}")
+        cursor = db.get_new_cursor()
+        cursor.execute(remove_listing)
+        db.get_connection().commit()
+        notifications.set_notification("Listing removed successfully.")
+        return View.HOST_DASH
+
+
 # prints all listings for user SIN
 def display_listings(sin):
     get_listings = ("SELECT lid,streetnum,streetname,city,country,zipcode,btype  FROM Listing WHERE sin = %s")
