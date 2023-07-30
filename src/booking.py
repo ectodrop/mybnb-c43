@@ -240,7 +240,7 @@ def search_by_addr(sin):
     ]
     [streetnum, streetname, city, country, zipcode] = utils.display_form(questions)
     original = ["SELECT lid, streetnum, streetname, city, country, zipcode, btype, name, avg, min, max FROM",
-                    "(SELECT * FROM Listing NATURAL JOIN User WHERE (streetnum = %s OR %s = '') AND (streetname = %s OR %s = '') AND (city = %s OR %s = '') AND (country = %s OR %s = '') AND (zipcode = %s OR %s = '')) AS S NATURAL JOIN",
+                    "(SELECT * FROM Listing NATURAL JOIN User WHERE sin != " + str(sin) + " AND (streetnum = %s OR %s = '') AND (streetname = %s OR %s = '') AND (city = %s OR %s = '') AND (country = %s OR %s = '') AND (zipcode = %s OR %s = '')) AS S NATURAL JOIN",
                     "(SELECT lid, avg(price) AS avg, min(price) AS min, max(price) AS max FROM (SELECT * from Availability WHERE",
                     "date >= %s",
                     ") AS R GROUP BY lid) AS T",
@@ -259,7 +259,7 @@ def search_by_zipcode(sin):
     ]
     [zipcode] = utils.display_form(questions)
     original = ["SELECT lid, streetnum, streetname, city, country, zipcode, btype, name, avg, min, max FROM",
-                    '''(SELECT * FROM Listing NATURAL JOIN User WHERE zipcode like %s"___") AS S NATURAL JOIN''',
+                    "(SELECT * FROM Listing NATURAL JOIN User WHERE sin != " + str(sin) + ''' AND zipcode like %s"___") AS S NATURAL JOIN''',
                     "(SELECT lid, avg(price) AS avg, min(price) AS min, max(price) AS max FROM (SELECT * from Availability WHERE",
                     "date >= %s",
                     ") AS R GROUP BY lid) AS T"
@@ -281,7 +281,7 @@ def search_by_location(sin):
     [longi, lati, dist] = utils.display_form(questions)
     dist_params = [float(lati), float(lati), float(longi), float(dist) if dist else 50.0 ]
     original = ["SELECT lid, streetnum, streetname, city, country, zipcode, btype, name, avg, min, max, 12742*temp*sin(SQRT(temp)) AS distance FROM",
-                    "(SELECT lid, streetnum, streetname, city, country, zipcode, btype, name, POWER(sin((latitude - %s)/2), 2) + cos(latitude)*cos(%s)*POWER(sin((longitude - %s)/2), 2) AS temp FROM Listing NATURAL JOIN User) AS S NATURAL JOIN",
+                    "(SELECT lid, streetnum, streetname, city, country, zipcode, btype, name, POWER(sin((latitude - %s)/2), 2) + cos(latitude)*cos(%s)*POWER(sin((longitude - %s)/2), 2) AS temp FROM Listing NATURAL JOIN User WHERE sin != " + str(sin) + ") AS S NATURAL JOIN",
                     "(SELECT lid, avg(price) AS avg, min(price) AS min, max(price) AS max FROM (SELECT * from Availability WHERE",
                     "date >= %s",
                     ") AS R GROUP BY lid) AS T",
@@ -328,7 +328,7 @@ def sort_by_price(search_query, sorted, for_distance):
 def browse_listings(sin):
     utils.clear_screen()
     search_query = ["SELECT DISTINCT lid, streetnum, streetname, city, country, zipcode, btype, name, avg, min, max FROM",
-                    "(SELECT * FROM Listing NATURAL JOIN User) AS S NATURAL JOIN",
+                    "(SELECT * FROM Listing NATURAL JOIN User WHERE sin != " + str(sin) + ") AS S NATURAL JOIN",
                     "(SELECT lid, avg(price) AS avg, min(price) AS min, max(price) AS max FROM (SELECT * from Availability WHERE",
                     "date >= %s",
                     ") AS R GROUP BY lid) AS T",
