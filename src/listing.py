@@ -5,9 +5,11 @@ import utils
 import windows
 import datetime
 from decorators import error_notif
-@error_notif()
+from views import View
+
+
 def create_listing(sin):
-    query = ("INSERT INTO Listing "
+    insert_listing = ("INSERT INTO Listing "
                "(longitude,"
                "latitude,"
                "streetnum,"
@@ -27,13 +29,119 @@ def create_listing(sin):
         "Enter the Housing type: ",
     ]
     answers = [str(random.uniform(-90, 90)), str(random.uniform(-180,180))]
-
     answers += utils.display_form(questions)
 
+    query = "SELECT price FROM Building WHERE btype = %s"
     cursor = db.get_new_cursor()
-    cursor.execute(query, tuple(answers + [sin]))
+    cursor.execute(query, (answers[-1],))
+    price = cursor.fetchone()[0]
+
+    query = "SELECT atype, price FROM Amenity"
+    cursor = db.get_new_cursor()
+    cursor.execute(query)
+    remaining = cursor.fetchall()
+
+    query += " WHERE category = %s or category = %s"
+    params = ('Essential', 'Safety')
+    cursor = db.get_new_cursor()
+    cursor.execute(query, params)
+    basic = cursor.fetchall()
+
+    stop = "y"
+    selected = []
+    utils.clear_screen()
+    print("[Host Toolkit Listing Price Per Day Estimate] $" + str(price))
+    while (stop == "y"):
+        print(basic)
+        print("Enter the amenities that your listing offers")
+        remaining = print_remaining_amenities(remaining, selected)
+        if not remaining:
+            utils.clear_screen()
+            print("All available amenities have been added.")
+            print("Final: [Host Toolkit Listing Price Per Day Estimate] $" + str(price))
+            print("Confirm creation of listing")
+            choice = input("Input (y/n): ")
+            if choice == "n":
+                notifications.set_notification("Did not create listing.")
+                return
+            elif choice != "y":
+                notifications.set_notification("Invalid entry.")
+                return
+            break
+
+        choice = int(input("Select from available amenities (enter 0 to submit the list): "))
+        while choice > 0 and choice <= len(remaining):
+            item = remaining[choice - 1]
+            selected.append(item)
+            price += item[1]
+            if item in basic:
+                basic.remove(item)
+            choice = int(input("Select from available amenities (enter 0 to submit the list): "))
+
+        if (choice == 0):
+            print("Changes saved.")
+        else:
+            print("Invalid entry.")
+
+        print("Updated: [Host Toolkit Listing Price Per Day Estimate] $" + str(price))
+
+        if basic:
+            print("We recommend adding the following essential and safety amenities: ")
+            print_amenities(basic)
+            print("Continue adding amenities?")
+        else:
+            print("All essential and safety amenities have been added. Continue adding amenities?")
+        stop = input("Enter (y/n): ")
+        utils.clear_screen()
+    
+    if stop != "y" and stop != "n":
+        print("Invalid entry.")
+
+    if stop != "y":
+        print("Final: [Host Toolkit Listing Price Per Day Estimate] $" + str(price))
+        print("Confirm creation of listing")
+        choice = input("Input (y/n): ")
+        if choice == "n":
+            notifications.set_notification("Did not create listing.")
+            return
+        elif choice != "y":
+            notifications.set_notification("Invalid entry.")
+            return
+
+    cursor = db.get_new_cursor()
+    cursor.execute(insert_listing, tuple(answers + [sin]))
     db.get_connection().commit()
-    notifications.set_notification("Successfully created a listing")
+    lid = int(cursor.lastrowid)
+
+    if selected:
+        params = []
+        insert_amenities = ("INSERT INTO ListingAmenities(lid, atype) VALUES ")
+        for item in selected:
+            insert_amenities += "(%s, %s),"
+            params += [lid, item[0]]
+        cursor = db.get_new_cursor()
+        cursor.execute(insert_amenities[:-1], tuple(params))
+        db.get_connection().commit()
+
+    notifications.set_notification("Listing created successfully.")
+
+
+def print_amenities(amenities):
+    count = 1
+    for item in amenities:
+        print(str(count) + ".", item[0] + " [expected price increase: $" + str(item[1]) + "]")
+        count += 1
+
+def print_remaining_amenities(amenities, selected):
+    remaining = []
+    count = 1
+    for item in amenities:
+        if item not in selected:
+            print(str(count) + ".", item[0] + " [expected price increase: $" + str(item[1]) + "]")
+            remaining.append(item)
+            count += 1
+    return remaining
+
 
 @error_notif(default=0)
 def select_listing(sin):
@@ -42,7 +150,6 @@ def select_listing(sin):
 
     valid_ids = set(get_listing_ids(sin))
     if len(valid_ids) == 0:
-        notifications.set_notification("you don't have any listings!")
         return
 
     questions = ["Select an id: "]
@@ -54,6 +161,7 @@ def select_listing(sin):
             break
         print("please enter a valid id")
     return lid
+
 
 @error_notif()
 def update_availablity(lid, remove=False):
@@ -82,6 +190,7 @@ def update_availablity(lid, remove=False):
 
         print(f"Adding availability from {start_date} to {end_date}...")
 
+        print("[Host Toolkit Listing Price Per Day Estimate]: $" + str(get_host_toolkit_pricing(lid)))
         price = input(f"Please set a price for this timeframe: ")
         # insert availability
         insertavailability = ("INSERT IGNORE INTO Availability(date, price, lid)"
@@ -105,6 +214,7 @@ def update_availablity(lid, remove=False):
 
     db.get_connection().commit()
     return 
+
 
 @error_notif()
 def update_price(lid):
@@ -130,6 +240,7 @@ def update_price(lid):
         notifications.set_notification("Date range must contain only available dates")
         return
 
+    print("[Host Toolkit Listing Price Per Day Estimate]: $" + str(get_host_toolkit_pricing(lid)))
     price = input(f"Set new price for {start_date} to {end_date}: ")
     update_pricing = (f"UPDATE Availability SET price = {price} "
                       f"WHERE date >= '{start_date}' AND date <= '{end_date}'")
@@ -138,6 +249,7 @@ def update_price(lid):
     cursor.execute(update_pricing)
     db.get_connection().commit()
     notifications.set_notification(f"Price from {start_date} to {end_date} set to ${price}")
+
 
 @error_notif()
 def host_cancel_booking(lid):
@@ -169,11 +281,17 @@ def display_listings(sin):
     cursor = db.get_new_cursor()
     cursor.execute(get_listings, (sin,))
     result = cursor.fetchall()
+
     print("YOUR LISTINGS")
-    print(f"{'id':5}{'street#':10}{'streetname':15}{'city':15}{'country':15}{'zipcode':10}{'type':15}")
+    if result:
+        print(f"{'id':5}{'street#':10}{'streetname':15}{'city':15}{'country':15}{'zipcode':10}{'type':15}")
+    else:
+        print("......No listings found!......")
+
     for row in result:
         (lid, streetnum, streetname, city, country, zipcode, btype ) = row
         print(f"{lid:<5}{streetnum:10}{streetname:15}{city:15}{country:15}{zipcode:10}{btype:15}")
+
 
 # prints all bookings for listing LID
 def display_bookings(lid):
@@ -186,7 +304,8 @@ def display_bookings(lid):
     for row in result:
         (bid, name, start, end) = row
         print(f"{bid:<15}{name:20}{utils.date_to_str(start):15}{utils.date_to_str(end):15}")
-    
+
+  
 # returns a list of ids for each listing associated with the user
 def get_listing_ids(sin):
     listings = ("SELECT lid FROM Listing WHERE sin = %s")
@@ -195,6 +314,7 @@ def get_listing_ids(sin):
     result = cursor.fetchall()
     return [row[0] for row in result]
 
+
 # return list of tuples (date,price) where PRICE is the cost for renting on DATE
 def get_available_dates(lid):
     getavailabilities = ("SELECT date, price FROM Availability WHERE lid = %s ")
@@ -202,6 +322,7 @@ def get_available_dates(lid):
     cursor.execute(getavailabilities, (lid,))
     result = cursor.fetchall()
     return result
+
 
 # return a list of tuples (date, bid) where BID occupies date for listing LID
 def get_bookings_dates(lid):
@@ -220,6 +341,7 @@ def get_bookings_dates(lid):
             s += delta
     return bookings
 
+
 # if there is a booking within the specified daterange for the listing
 def is_booked(lid, start, end):
     check_dates = (f"SELECT * FROM Booking WHERE lid = {lid} AND "
@@ -232,6 +354,7 @@ def is_booked(lid, start, end):
     result = cursor.fetchone()
     return result != None
 
+
 # if every date in the daterange has an associated availability for the listing
 def is_available(lid, start, end):
     available = (f"SELECT * FROM Availability WHERE lid = {lid} AND "
@@ -241,6 +364,7 @@ def is_available(lid, start, end):
     cursor.execute(available)
     return diff.days+1 == cursor.rowcount
 
+
 # if there is at least 1 day in the range where listing is available
 def exists_availability(lid, start, end):
     exists = (f"SELECT * FROM Availability WHERE lid = {lid} AND "
@@ -248,3 +372,18 @@ def exists_availability(lid, start, end):
     cursor = db.get_new_cursor()
     cursor.execute(exists)
     return cursor.fetchone() != None
+
+
+# get the estimated price per day calculated by the host toolkit
+def get_host_toolkit_pricing(lid):
+    query = (f"SELECT price FROM BUilding NATURAL JOIN Listing WHERE lid = {lid}")
+    cursor = db.get_new_cursor()
+    cursor.execute(query)
+    price = cursor.fetchone()[0]
+    query = (f"SELECT sum(price) FROM ListingAmenities NATURAL JOIN Amenity WHERE lid = {lid}")
+    cursor = db.get_new_cursor()
+    cursor.execute(query)
+    result = cursor.fetchone()[0]
+    if result:
+        price += result
+    return price
