@@ -50,30 +50,28 @@ def create_booking(sin, lid):
     cursor = db.get_new_cursor()
     cursor.execute(retrieve_user, (sin,))
     (creditcard,) = cursor.fetchone()
-    not_present = not creditcard
 
     while not creditcard:
         print("Please enter your credit card number: ")
         creditcard = input("Credit Card Number : ")
-    print(creditcard)
+
     update_user = ("UPDATE User SET creditcard = %s WHERE sin = %s")
     cursor = db.get_new_cursor()
     cursor.execute(update_user, (int(creditcard), sin))
     db.get_connection().commit()
 
-    if not_present:
-        print("Credit card number saved successfully.")
-    print("Payment of $" + str(price) + "made for booking.")
     insert_booking = ("INSERT INTO Booking(sin, lid, status, start_date, end_date) VALUES(%s, %s, %s, %s, %s)")
     params = (sin, lid, 'ACTIVE', start_date, end_date)
     cursor = db.get_new_cursor()
     cursor.execute(insert_booking, params)
     db.get_connection().commit()
+
     notifications.set_notification("Booking created successfully.")
 
 
 @error_notif()
 def print_amenities_list():
+    print("AMENITIES")
     amenities = ["Wifi", "TV", "Kitchen", "Washer", "AC", "Free Parking", "Paid Parking", "Dedicated Workspace", 
                  "Pool", "Hot Tub", "Patio", "Fire Pit", "Grill", "Outdoor dining", "Pool Table", "Indoor Fireplace",
                  "Piano", "Exercise", "Lake Access", "Beach Access", "Smoke Alarm", "First Aid Kit", "Fire Extinguisher", "Carbon Monoxide Alarm"]
@@ -115,7 +113,7 @@ def display_listings(get_listings, answers, show_distance):
     cursor = db.get_new_cursor()
     cursor.execute(get_listings, tuple(answers))
     result = cursor.fetchall()
-
+    
     print("AVAILABLE LISTINGS")
     if (result and show_distance):
         print(f"{'ID':5}{'Host Name':15}{'Street #':10}{'Street Name':15}{'City':15}{'Country':15}{'Zipcode':10}{'Type':15}{'Avg Price/Day':15}{'Min Price/Day':15}{'Max Price/Day':15}{'Distance':8}")
@@ -133,12 +131,14 @@ def display_listings(get_listings, answers, show_distance):
             (lid, streetnum, streetname, city, country, zipcode, btype, name, avg, min, max) = row
             print(f"{lid:<5}{name:15}{streetnum:10}{streetname:15}{city:15}{country:15}{zipcode:10}{btype:15}{round(avg, 2):<15}{round(min, 2):<15}{round(max, 2):<15}")
         valid_ids.add(lid)
+    print("")
     return valid_ids
 
 
-def filter_search(search_query, answers, for_distance):
+def filter_search(search_query, original, for_distance):
     additional_query = "date >= %s"
-    additional_params = answers
+    tmr_date = utils.date_to_str(date.today() + timedelta(1))
+    additional_params = [tmr_date]
     choice = input("Filter by availability? Input (y/n): ")
     if (choice == "y"):
         questions = ["Enter the start date of availabilities (YYYY-MM-DD): ", "Enter the end date of availabilities (YYYY-MM-DD): "]
@@ -158,33 +158,42 @@ def filter_search(search_query, answers, for_distance):
         print("Invalid entry.")
     
     search_query[3] = additional_query
+    original[3] = additional_query
 
     choice = input("Filter by amenities? Input (y/n): ")
     if (choice == "y"):
+        notifications.set_notification("Displaying results with updated filters.")
         amenities = print_amenities_list()
         selected = []
         choice = int(input("Select amenities (enter 0 to submit the list): "))
-        while choice != 0 and choice <= len(amenities):
+        while choice > 0 and choice <= len(amenities):
             selected.append(amenities[choice - 1])
             choice = int(input("Select amenities (enter 0 to submit the list): "))
-        if (choice > len(amenities)):
+        if (choice > len(amenities) or choice < 0):
             print("Invalid entry.")
 
         if selected:
+            print("Amenities selected.")
             division_query = ("SELECT DISTINCT x.lid FROM ListingAmenities AS x WHERE NOT EXISTS "
-                              "(SELECT * FROM (SELECT atype from Amenity WHERE atype in " + str(tuple(selected)) +
+                              "(SELECT * FROM (SELECT atype from Amenity WHERE atype in " + str(selected).replace("[", "(").replace("]", ")") +
                               ") AS y WHERE NOT EXISTS (SELECT * FROM ListingAmenities AS z "
                               "WHERE (z.lid=x.lid) AND (z.atype=y.atype)))")
             if for_distance:
-                search_query = ["SELECT * FROM (" + division_query + ") AS A NATURAL JOIN ("] + search_query[:-1] + [") AS B"] + search_query[-1:]
+                search_query = ["SELECT * FROM (" + division_query + ") AS A NATURAL JOIN ("] + original[:-1] + [") AS B"] + original[-1:]
             else:
-                search_query = ["SELECT * FROM (" + division_query + ") AS A NATURAL JOIN ("] + search_query + [") AS B"]
+                search_query = ["SELECT * FROM (" + division_query + ") AS A NATURAL JOIN ("] + original + [") AS B"]
+        else:
+            print("No amenities selected.")
+            return original, additional_params
+    notifications.set_notification("Displaying results with updated filters.")
     return search_query, additional_params
 
 
 @error_notif()
-def search_loop(sin, search_query, params, for_distance):
+def search_loop(sin, original, original_params, for_distance):
     sorted = for_distance
+    search_query = original
+    params = original_params
     while(True):
         get_listings = " ".join(search_query)
         valid_ids = display_listings(get_listings, params, for_distance)
@@ -192,7 +201,8 @@ def search_loop(sin, search_query, params, for_distance):
         print("1. Return to browsing all listings")
         if (valid_ids):
             print("2. View details of a listing")
-            print("3. Order listings by average price")
+            print("3. Filter search results")
+            print("4. Order listings by average price")
         choice = input("Enter a choice: ")
         if choice == "2" and valid_ids:
             listing_options(sin, valid_ids)
@@ -200,6 +210,15 @@ def search_loop(sin, search_query, params, for_distance):
             notifications.set_notification("Search completed.")
             return
         elif choice == "3" and valid_ids:
+            search_query, more_params = filter_search(search_query, original, for_distance)
+            if for_distance:
+                params = original_params[:3]
+                params += more_params
+                params.append(original_params[-1]) 
+            else:
+                params = original_params[:-1]
+                params += more_params
+        elif choice == "4" and valid_ids:
             sorted = sort_by_price(search_query, sorted, for_distance)
         else:
             notifications.set_notification("Invalid entry.")
@@ -208,8 +227,9 @@ def search_loop(sin, search_query, params, for_distance):
 
 
 @error_notif()
-def search_by_addr(sin, answers):
+def search_by_addr(sin):
     utils.clear_screen()
+    tmr_date = utils.date_to_str(date.today() + timedelta(1))
     print("Searching by Address")
     questions = [
         "Enter the street # (leave blank for any): ",
@@ -219,41 +239,39 @@ def search_by_addr(sin, answers):
         "Enter the zipcode (leave blank for any): "
     ]
     [streetnum, streetname, city, country, zipcode] = utils.display_form(questions)
-    search_query = ["SELECT lid, streetnum, streetname, city, country, zipcode, btype, name, avg, min, max FROM",
-                    "(SELECT * FROM Listing NATURAL JOIN User WHERE (streetnum = %s OR %s = '') AND (streetname = %s OR %s = '') AND (city = %s OR %s = '') AND (country = %s OR %s = '') AND (zipcode = %s OR %s = '')) AS S NATURAL JOIN",
+    original = ["SELECT lid, streetnum, streetname, city, country, zipcode, btype, name, avg, min, max FROM",
+                    "(SELECT * FROM Listing NATURAL JOIN User WHERE sin != " + str(sin) + " AND (streetnum = %s OR %s = '') AND (streetname = %s OR %s = '') AND (city = %s OR %s = '') AND (country = %s OR %s = '') AND (zipcode = %s OR %s = '')) AS S NATURAL JOIN",
                     "(SELECT lid, avg(price) AS avg, min(price) AS min, max(price) AS max FROM (SELECT * from Availability WHERE",
                     "date >= %s",
                     ") AS R GROUP BY lid) AS T",
                 ]
-    params = [streetnum, streetnum, streetname, streetname, city, city, country, country, zipcode, zipcode]
-    search_query, more_params = filter_search(search_query, answers, False)
-    params += more_params
-    search_loop(sin, search_query, params, False)
+    original_params = [streetnum, streetnum, streetname, streetname, city, city, country, country, zipcode, zipcode, tmr_date]
+    search_loop(sin, original, original_params, False)
 
 
 @error_notif()
-def search_by_zipcode(sin, answers):
+def search_by_zipcode(sin):
     utils.clear_screen()
+    tmr_date = utils.date_to_str(date.today() + timedelta(1))
     print("Searching by Zipcode")
     questions = [
         "Enter a zipcode: "
     ]
     [zipcode] = utils.display_form(questions)
-    search_query = ["SELECT lid, streetnum, streetname, city, country, zipcode, btype, name, avg, min, max FROM",
-                    '''(SELECT * FROM Listing NATURAL JOIN User WHERE zipcode like %s"___") AS S NATURAL JOIN''',
+    original = ["SELECT lid, streetnum, streetname, city, country, zipcode, btype, name, avg, min, max FROM",
+                    "(SELECT * FROM Listing NATURAL JOIN User WHERE sin != " + str(sin) + ''' AND zipcode like %s"___") AS S NATURAL JOIN''',
                     "(SELECT lid, avg(price) AS avg, min(price) AS min, max(price) AS max FROM (SELECT * from Availability WHERE",
                     "date >= %s",
                     ") AS R GROUP BY lid) AS T"
                 ]
-    params = [zipcode[:3]]
-    search_query, more_params = filter_search(search_query, answers, False)
-    params += more_params
-    search_loop(sin, search_query, params, False)
+    original_params = [zipcode[:3], tmr_date]
+    search_loop(sin, original, original_params, False)
         
 
 @error_notif()
-def search_by_location(sin, answers):
+def search_by_location(sin):
     utils.clear_screen()
+    tmr_date = utils.date_to_str(date.today() + timedelta(1))
     print("Searching by Location")
     questions = [
         "Enter a longitude: ",
@@ -262,19 +280,17 @@ def search_by_location(sin, answers):
     ]
     [longi, lati, dist] = utils.display_form(questions)
     dist_params = [float(lati), float(lati), float(longi), float(dist) if dist else 50.0 ]
-    search_query = ["SELECT lid, streetnum, streetname, city, country, zipcode, btype, name, avg, min, max, 12742*temp*sin(SQRT(temp)) AS distance FROM",
-                    "(SELECT lid, streetnum, streetname, city, country, zipcode, btype, name, POWER(sin((latitude - %s)/2), 2) + cos(latitude)*cos(%s)*POWER(sin((longitude - %s)/2), 2) AS temp FROM Listing NATURAL JOIN User) AS S NATURAL JOIN",
+    original = ["SELECT lid, streetnum, streetname, city, country, zipcode, btype, name, avg, min, max, 12742*temp*sin(SQRT(temp)) AS distance FROM",
+                    "(SELECT lid, streetnum, streetname, city, country, zipcode, btype, name, POWER(sin((latitude - %s)/2), 2) + cos(latitude)*cos(%s)*POWER(sin((longitude - %s)/2), 2) AS temp FROM Listing NATURAL JOIN User WHERE sin != " + str(sin) + ") AS S NATURAL JOIN",
                     "(SELECT lid, avg(price) AS avg, min(price) AS min, max(price) AS max FROM (SELECT * from Availability WHERE",
                     "date >= %s",
                     ") AS R GROUP BY lid) AS T",
                     "WHERE 12742*temp*sin(SQRT(temp)) <= %s",
                     "ORDER BY distance ASC"
                 ]
-    params = dist_params[:3]
-    search_query, more_params = filter_search(search_query, answers, True)
-    params += more_params
-    params.append(dist_params[3])
-    search_loop(sin, search_query, params, True)
+    original_params = dist_params[:3]
+    original_params += [tmr_date, dist_params[-1]]
+    search_loop(sin, original, original_params, True)
 
 
 @error_notif()
@@ -312,15 +328,18 @@ def sort_by_price(search_query, sorted, for_distance):
 def browse_listings(sin):
     utils.clear_screen()
     search_query = ["SELECT DISTINCT lid, streetnum, streetname, city, country, zipcode, btype, name, avg, min, max FROM",
-                    "(SELECT * FROM Listing NATURAL JOIN User) AS S NATURAL JOIN",
-                    "(SELECT lid, avg(price) AS avg, min(price) AS min, max(price) AS max FROM (SELECT * from Availability WHERE date >= %s) AS R GROUP BY lid) AS T",
+                    "(SELECT * FROM Listing NATURAL JOIN User WHERE sin != " + str(sin) + ") AS S NATURAL JOIN",
+                    "(SELECT lid, avg(price) AS avg, min(price) AS min, max(price) AS max FROM (SELECT * from Availability WHERE",
+                    "date >= %s",
+                    ") AS R GROUP BY lid) AS T",
                 ]
+    original = search_query
     tmr_date = utils.date_to_str(date.today() + timedelta(1))
+    answers = [tmr_date]
     sorted = False
     while (True):
         print("Browse and Book Listings")
         get_listings = " ".join(search_query)
-        answers = [tmr_date]
         valid_ids = display_listings(get_listings, answers, False)
         print("Please select an option: ")
         print("1. Return to dashboard")
@@ -329,18 +348,21 @@ def browse_listings(sin):
             print("3. Search by longitude/latitude")
             print("4. Search listings with similar zipcodes")
             print("5. Search for listing by address")
-            print("6. Order listings by average price")
+            print("6. Filter all listings")
+            print("7. Order listings by average price")
         choice = input("Enter a choice: ")
 
         if choice == "2" and valid_ids:
             listing_options(sin, valid_ids)
         elif choice == "3" and valid_ids:
-            search_by_location(sin, answers)
+            search_by_location(sin)
         elif choice == "4" and valid_ids:
-            search_by_zipcode(sin, answers)
+            search_by_zipcode(sin)
         elif choice == "5" and valid_ids:
-            search_by_addr(sin, answers)
+            search_by_addr(sin)
         elif choice == "6" and valid_ids:
+            search_query, answers = filter_search(search_query, original, False)
+        elif choice == "7" and valid_ids:
             sorted = sort_by_price(search_query, sorted, False)
         elif choice == "1":
             return
@@ -394,10 +416,11 @@ def display_bookings(sin, is_past):
         (bid, start_date, end_date, name, streetnum, streetname, city, country, zipcode, btype ) = row
         valid_ids.add(bid)
         print(f"{bid:<5}{str(start_date):12}{str(end_date):12}{name:15}{streetnum:10}{streetname:15}{city:15}{country:15}{zipcode:10}{btype:15}")
+    print("")
     return valid_ids
 
 
-def cancel_booking(valid_ids):
+def client_cancel_booking(valid_ids):
     questions = [
         "Enter a booking id: "
     ]
@@ -431,7 +454,7 @@ def future_bookings(sin):
             print("2. Cancel a booking")
         choice = input("Enter a choice: ")
         if valid_ids and choice == "2":
-            cancel_booking(valid_ids)
+            client_cancel_booking(valid_ids)
         elif choice == "1":
             return
         else:

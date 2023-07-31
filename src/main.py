@@ -95,7 +95,8 @@ def manage_listing(lid):
   print("3. Remove availability")
   print("4. View bookings")
   print("5. Cancel booking")
-  print("6. Return to host menu")
+  print("6. Remove listing")
+  print("7. Return to host menu")
   choice = input("Enter a choice: ")
 
   if choice == "1":
@@ -110,6 +111,8 @@ def manage_listing(lid):
   elif choice == "5":
     listing.host_cancel_booking(lid)
   elif choice == "6":
+    return listing.remove_listing(lid)
+  elif choice == "7":
     return View.HOST_DASH
   else:
     notifications.set_notification("Invalid entry")
