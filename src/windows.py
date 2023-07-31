@@ -8,8 +8,7 @@ import utils
 bookings = [...,(date, booking_id),...]
 availabilities = [...,date,...]
 """
-def display_calendar(bookings, availabilities):
-    
+def display_calendar(bookings, availabilities, limit=True):
     def highlight_booking(_):
         nonlocal previous
         date = utils.str_to_date(cal.get_date())
@@ -53,9 +52,10 @@ def display_calendar(bookings, availabilities):
                    selectmode="day",
                    tooltipdelay=0,
                    date_pattern="y-mm-dd",
-                   mindate=today,
-                   maxdate=today+datetime.timedelta(days=365*2),
                    showothermonthdays=False)
+    if limit:
+        cal["mindate"] = today
+        cal["maxdate"] = today+datetime.timedelta(days=365*2)
     
     for date, bid in bookings:
         date_tags[date] = bid

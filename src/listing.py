@@ -5,6 +5,8 @@ import utils
 import windows
 import datetime
 from decorators import error_notif
+from itertools import zip_longest
+
 from views import View
 
 
@@ -275,6 +277,73 @@ def host_cancel_booking(lid):
     db.get_connection().commit()
     notifications.set_notification(f"Successfully cancelled booking#{id}")
 
+@error_notif()
+def add_amenity(lid):
+    insert = ("INSERT INTO ListingAmenities(atype, lid) VALUES (%s, %s)")
+    
+    get_amenities = ("SELECT atype, category FROM Amenity ORDER BY category")
+    existing_amenities = f"SELECT atype From ListingAmenities WHERE lid = {lid}"
+    
+    cursor = db.get_new_cursor()
+    cursor.execute(get_amenities)
+    result = cursor.fetchall()
+    categories = {"Essential":[], "Safety":[], "Standout":[]}
+    for type, category in result:
+        categories[category].append(type)
+    
+    cursor = db.get_new_cursor()
+    cursor.execute(existing_amenities)
+    result = cursor.fetchall()
+    existing = []
+    for (type, ) in result:
+        existing.append(type)
+
+    print(f"\033[94m{'ESSENTIAL':30}{'SAFETY':30}{'STANDOUT':30}\033[0m")
+    for c1, c2, c3 in zip_longest(categories["Essential"], categories["Safety"], categories["Standout"]):
+        print(f"{c1 or '' :30}{c2 or '':30}{c3 or '':30}")
+    if len(existing) > 0:
+        print("PREVIOUSLY ADDED AMENITIES")
+        print(", ".join(existing))
+    amenities = categories["Essential"] + categories["Safety"] + categories["Standout"]
+    a = input("Choose amenity (Enter nothing to cancel): ")
+    if a == "":
+        notifications.set_notification("Cancelled transaction")
+        return
+    if a not in amenities:
+        notifications.set_notification("Must enter a valid amenity")
+        return
+    if a in existing:
+        notifications.set_notification("Already added this amenity")
+        return
+    cursor = db.get_new_cursor()
+    cursor.execute(insert, (a, lid))
+    db.get_connection().commit()
+    notifications.set_notification(f"Added '{a}'")
+
+@error_notif()
+def remove_amenity(lid):
+    existing_amenities = f"SELECT atype From ListingAmenities WHERE lid = {lid}"
+    cursor = db.get_new_cursor()
+    cursor.execute(existing_amenities)
+    result = cursor.fetchall()
+    existing = []
+    for (type, ) in result:
+        existing.append(type)
+
+    print("\033[94mAmenities for this listing \033[0m")
+    print("\n".join(existing))
+
+    a = input("Choose an amenity to remove: ")
+    if a not in existing:
+        notifications.set_notification("Must choose a previously added amenity")
+        return
+    
+    delete = "DELETE FROM ListingAmenities WHERE lid = %s AND atype = %s"
+    cursor = db.get_new_cursor()
+    cursor.execute(delete, (lid, a))
+    db.get_connection().commit()
+    notifications.set_notification(f"Removed '{a}'")
+
 
 @error_notif()
 def remove_listing(lid):
@@ -320,7 +389,7 @@ def display_listings(sin):
 
 # prints all bookings for listing LID
 def display_bookings(lid):
-    bookings = (f"SELECT bid, name, start_date, end_date FROM Booking JOIN User WHERE lid = {lid}")
+    bookings = (f"SELECT bid, name, start_date, end_date FROM Booking NATURAL JOIN User WHERE lid = {lid}")
     cursor = db.get_new_cursor()
     cursor.execute(bookings)
     result = cursor.fetchall()
@@ -412,3 +481,21 @@ def get_host_toolkit_pricing(lid):
     if result:
         price += result
     return price
+
+# TODO add error checking
+@error_notif()
+def review_renter(lid):
+    display_bookings(lid)
+
+    bid = input("Enter a booking id: ")
+    review = input("Enter a review for the renter (text): ")
+    rating = input("Enter a rating for the renter (1-5): ")
+
+    updatereview = "UPDATE Booking SET host_comment = %s WHERE bid = %s"
+    cursor = db.get_new_cursor()
+    cursor.execute(updatereview, (review, int(bid)))
+    
+    updaterating = "UPDATE Booking SET host_rating = %s WHERE bid = %s"
+    
+    cursor = db.get_new_cursor()
+    cursor.execute(updaterating, (int(rating), int(bid)))

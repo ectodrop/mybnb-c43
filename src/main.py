@@ -1,6 +1,7 @@
 import user
 import listing
 import booking
+import reports
 import notifications
 import utils
 from views import View
@@ -30,6 +31,8 @@ def welcome():
 def client_dashboard(sin):
   print("RENTER VIEW")
   print("What would you like to do?")
+  if sin == "1":
+    print("0. View reports")
   print("1. Book a listing")
   print("2. View my future bookings")
   print("3. View my bookings history")
@@ -38,6 +41,9 @@ def client_dashboard(sin):
   print("10. Delete my account")
   choice = input("Enter a choice: ")
 
+  if choice == "0" and sin == "1":
+    return View.REPORTS
+  
   if choice == "1":
     booking.browse_listings(sin)
   elif choice == "2":
@@ -96,7 +102,10 @@ def manage_listing(lid):
   print("4. View bookings")
   print("5. Cancel booking")
   print("6. Remove listing")
-  print("7. Return to host menu")
+  print("7. Add Amenity")
+  print("8. Remove Amenity")
+  print("9. Add Review for Renter")
+  print("10. Return to host menu")
   choice = input("Enter a choice: ")
 
   if choice == "1":
@@ -113,10 +122,68 @@ def manage_listing(lid):
   elif choice == "6":
     return listing.remove_listing(lid)
   elif choice == "7":
+    listing.add_amenity(lid)
+  elif choice == "8":
+    listing.remove_amenity(lid)
+  elif choice == "9":
+    listing.review_renter(lid)
+  elif choice == "10":
     return View.HOST_DASH
   else:
     notifications.set_notification("Invalid entry")
   return View.LISTING
+
+def display_reports():
+  print("REPORTS")
+  print("1. Amount of bookings by city")
+  print("2. Amount of listings")
+  print("3. Rank Hosts by number of listings")
+  print("4. Retrieve Commercial hosts")
+  print("5. Rank renters by number of bookings")
+  print("6. Rank renters by number of cancellations")
+  print("7. Rank hosts by number of cancellations")
+  print("8. Generate word cloud for listing")
+  print("9. Return to client dashboard")
+  choice = input("Enter a choice: ")
+  
+  if choice == "1":
+    reports.bookings_by_city()
+  elif choice == "2":
+    return View.REPORTS_LISTING
+  elif choice == "3":
+    reports.rank_host_by_listing()
+  elif choice == "4":
+    reports.get_commercial_hosts()
+  elif choice == "5":
+    reports.rank_renter_by_bookings()
+  elif choice == "6":
+    reports.rank_renter_by_cancel()
+  elif choice == "7":
+    reports.rank_host_by_cancel()
+  elif choice == "8":
+    reports.get_popular_listing_nouns()
+  elif choice == "9":
+    return View.CLIENT_DASH
+  return View.REPORTS
+
+def display_reports_listing():
+  print("LISTING REPORTS")
+  print("1. Count by country")
+  print("2. Count by country and city")
+  print("3. Count by country, city and zipcode")
+  print("4. Return to reports")
+  choice = input("Enter a choice: ")
+  if choice == "1":
+    reports.listings_per_country()
+  elif choice == "2":
+    reports.listings_per_country_city()
+  elif choice == "3":
+    reports.listings_per_country_city_zip()
+  elif choice == "4":
+    return View.REPORTS
+
+  return View.REPORTS_LISTING
+  
 
 def main ():
   cur_view = View.WELCOME
@@ -127,7 +194,7 @@ def main ():
     notifications.display_notification()
     if cur_view == View.WELCOME:
       sin, cur_view = welcome()
-    
+
     elif cur_view == View.CLIENT_DASH:
       cur_view = client_dashboard(sin)
     
@@ -144,9 +211,14 @@ def main ():
     elif cur_view == View.LISTING:
       cur_view = manage_listing(lid)
     
+    elif cur_view == View.REPORTS:
+      cur_view = display_reports()
+    
+    elif cur_view == View.REPORTS_LISTING:
+      cur_view = display_reports_listing()
     elif cur_view == View.EXIT:
       break
-
+    
     elif cur_view == None:
       break
   print("Goodbye")

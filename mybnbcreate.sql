@@ -40,7 +40,8 @@ create table ListingAmenities(
 	atype varchar(50),
     lid int not null,
     PRIMARY KEY (atype, lid),
-    FOREIGN KEY (lid) REFERENCES Listing(lid) ON DELETE CASCADE
+    FOREIGN KEY (lid) REFERENCES Listing(lid) ON DELETE CASCADE,
+    FOREIGN KEY (atype) REFERENCES Amenity(atype) ON DELETE CASCADE
 );
 
 create table Availability(
