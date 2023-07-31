@@ -6,4 +6,6 @@ class View(Enum):
   HOST_DASH = auto()
   SELECT_LISTING = auto()
   LISTING = auto()
+  REPORTS = auto()
+  REPORTS_LISTING = auto()
   EXIT = auto()
