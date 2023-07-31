@@ -401,7 +401,7 @@ def exists_availability(lid, start, end):
 
 # get the estimated price per day calculated by the host toolkit
 def get_host_toolkit_pricing(lid):
-    query = (f"SELECT price FROM BUilding NATURAL JOIN Listing WHERE lid = {lid}")
+    query = (f"SELECT price FROM Building NATURAL JOIN Listing WHERE lid = {lid}")
     cursor = db.get_new_cursor()
     cursor.execute(query)
     price = cursor.fetchone()[0]
