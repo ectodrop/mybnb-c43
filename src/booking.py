@@ -6,7 +6,7 @@ from views import View
 from datetime import date, timedelta
 from listing import get_bookings_dates, get_available_dates, is_booked, is_available
 import windows
-
+import validators
 
 @error_notif()
 def create_booking(sin, lid):
@@ -38,7 +38,7 @@ def create_booking(sin, lid):
 
     print("Total price of booking: $" + str(price))
     print("Confirm booking of this listing from " + start_date + " to " + end_date + "?")
-    choice = input("Enter (y/n): ")
+    choice = utils.get_answer("Enter (y/n): ", validators.yes_or_no)
     if choice == "n":
         notifications.set_notification("Booking failed.")
         return
@@ -96,13 +96,10 @@ def listing_info(sin, lid):
 
 @error_notif()
 def listing_options(sin, valid_ids):
-    questions = [
-        "Enter a listing ID: "
-    ]
-    [lid] = utils.display_form(questions)
+    lid = utils.get_answer("Enter a listing ID (enter blank to cancel): ", validators.is_contained(valid_ids).or_blank)
 
-    if (int(lid) not in valid_ids):
-        notifications.set_notification("Listing ID not present in search results. Please try again.")
+    if lid == "":
+        notifications.set_notification("Cancelled")
     else:
         print("Listing Information")
         listing_info(sin, int(lid))
@@ -139,28 +136,23 @@ def filter_search(search_query, original, for_distance):
     additional_query = "date >= %s"
     tmr_date = utils.date_to_str(date.today() + timedelta(1))
     additional_params = [tmr_date]
-    choice = input("Filter by availability? Input (y/n): ")
+    choice = utils.get_answer("Filter by availability? Input (y/n): ", validators.yes_or_no)
     if (choice == "y"):
-        questions = ["Enter the start date of availabilities (YYYY-MM-DD): ", "Enter the end date of availabilities (YYYY-MM-DD): "]
-        dates = utils.display_form(questions)
+        start, end = windows.display_calendar([],[])
         additional_query += " AND date <= %s"
-        additional_params = dates
-    elif (choice != "n"):
-        print("Invalid entry.")
+        additional_params = [start, end]
 
-    choice = input("Filter by price? Input (y/n): ")
+    choice = utils.get_answer("Filter by price? Input (y/n): ", validators.yes_or_no)
     if (choice == "y"):
-        questions = ["Enter the minimum price per day: ", "Enter the maximum price per day: "]
+        questions = [("Enter the minimum price per day: ", validators.is_int), ("Enter the maximum price per day: ", validators.is_int)]
         [min_price, max_price] = utils.display_form(questions)
         additional_query += " AND price >= %s AND price <= %s"
         additional_params += [float(min_price), float(max_price)]
-    elif (choice != "n"):
-        print("Invalid entry.")
     
     search_query[3] = additional_query
     original[3] = additional_query
 
-    choice = input("Filter by amenities? Input (y/n): ")
+    choice = utils.get_answer("Filter by amenities? Input (y/n): ", validators.yes_or_no)
     if (choice == "y"):
         notifications.set_notification("Displaying results with updated filters.")
         amenities = print_amenities_list()
@@ -232,11 +224,11 @@ def search_by_addr(sin):
     tmr_date = utils.date_to_str(date.today() + timedelta(1))
     print("Searching by Address")
     questions = [
-        "Enter the street # (leave blank for any): ",
-        "Enter the street name (leave blank for any): ",
-        "Enter the city (leave blank for any): ",
-        "Enter the country (leave blank for any): ",
-        "Enter the zipcode (leave blank for any): "
+        ("Enter the street # (leave blank for any): ", validators.is_int.or_blank),
+        ("Enter the street name (leave blank for any): ", validators.is_string),
+        ("Enter the city (leave blank for any): ", validators.is_string),
+        ("Enter the country (leave blank for any): ", validators.is_string),
+        ("Enter the zipcode (leave blank for any): ", validators.is_zipcode.or_blank)
     ]
     [streetnum, streetname, city, country, zipcode] = utils.display_form(questions)
     original = ["SELECT lid, streetnum, streetname, city, country, zipcode, btype, name, avg, min, max FROM",
@@ -254,10 +246,7 @@ def search_by_zipcode(sin):
     utils.clear_screen()
     tmr_date = utils.date_to_str(date.today() + timedelta(1))
     print("Searching by Zipcode")
-    questions = [
-        "Enter a zipcode: "
-    ]
-    [zipcode] = utils.display_form(questions)
+    zipcode = utils.get_answer("Enter a zipcode: ", validators.is_zipcode)
     original = ["SELECT lid, streetnum, streetname, city, country, zipcode, btype, name, avg, min, max FROM",
                     "(SELECT * FROM Listing NATURAL JOIN User WHERE sin != " + str(sin) + ''' AND zipcode like %s"___") AS S NATURAL JOIN''',
                     "(SELECT lid, avg(price) AS avg, min(price) AS min, max(price) AS max FROM (SELECT * from Availability WHERE",
@@ -274,9 +263,9 @@ def search_by_location(sin):
     tmr_date = utils.date_to_str(date.today() + timedelta(1))
     print("Searching by Location")
     questions = [
-        "Enter a longitude: ",
-        "Enter a latitude: ",
-        "Enter a radius of search (leave blank for a default of 50 km): "
+        ("Enter a longitude: ", validators.is_float),
+        ("Enter a latitude: ", validators.is_float),
+        ("Enter a radius of search (leave blank for a default of 50 km): ", validators.is_float.or_blank)
     ]
     [longi, lati, dist] = utils.display_form(questions)
     dist_params = [float(lati), float(lati), float(longi), float(dist) if dist else 50.0 ]
@@ -351,21 +340,21 @@ def browse_listings(sin):
             print("6. Filter all listings")
             print("7. Order listings by average price")
         choice = input("Enter a choice: ")
-
-        if choice == "2" and valid_ids:
-            listing_options(sin, valid_ids)
-        elif choice == "3" and valid_ids:
-            search_by_location(sin)
-        elif choice == "4" and valid_ids:
-            search_by_zipcode(sin)
-        elif choice == "5" and valid_ids:
-            search_by_addr(sin)
-        elif choice == "6" and valid_ids:
-            search_query, answers = filter_search(search_query, original, False)
-        elif choice == "7" and valid_ids:
-            sorted = sort_by_price(search_query, sorted, False)
-        elif choice == "1":
+        if choice == "1":
             return
+        elif valid_ids:
+            if choice == "2":
+                listing_options(sin, valid_ids)
+            elif choice == "3":
+                search_by_location(sin)
+            elif choice == "4":
+                search_by_zipcode(sin)
+            elif choice == "5":
+                search_by_addr(sin)
+            elif choice == "6":
+                search_query, answers = filter_search(search_query, original, False)
+            elif choice == "7":
+                sorted = sort_by_price(search_query, sorted, False) 
         else:
             notifications.set_notification("Invalid entry.")
         utils.clear_screen()
@@ -431,7 +420,7 @@ def client_cancel_booking(valid_ids):
         return
     else:
         print("Confirm cancellating of booking: ")
-        choice = input("Input (y/n): ")
+        choice = utils.get_answer("Input (y/n): ", validators.yes_or_no)
         if (choice != "y"):
             notifications.set_notification("Did not cancel booking.")
             return
@@ -478,7 +467,7 @@ def confirm_responses(responses, bid, existing_review):
 
     for i in  range(2):
         print("Replace new", types[i], "with previous", types[i] + "?")
-        choice = input("Input (y/n): ")
+        choice = utils.get_answer("Input (y/n): ", validators.yes_or_no)
         if (choice == "y"):
             params.append(responses[i])
         elif (choice == "n"):
@@ -492,9 +481,9 @@ def confirm_responses(responses, bid, existing_review):
 @error_notif()
 def post_review(valid_ids):
     questions = [
-        "Enter a booking ID: ",
-        "Enter a rating from 1 to 5 (leave blank for none): ",
-        "Enter a comment (leave blank for none): "
+        ("Enter a booking ID: ", None)
+        ("Enter a rating from 1 to 5 (leave blank for none): ", None),
+        ("Enter a comment (leave blank for none): ", None)
     ]
     [bid] = utils.display_form(questions[:1])
     if (int(bid) not in valid_ids):

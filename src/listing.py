@@ -4,12 +4,13 @@ import random
 import utils
 import windows
 import datetime
+import validators
 from decorators import error_notif
 from itertools import zip_longest
 
 from views import View
 
-
+@error_notif()
 def create_listing(sin):
     insert_listing = ("INSERT INTO Listing "
                "(longitude,"
@@ -22,23 +23,25 @@ def create_listing(sin):
                "btype,"
                "sin)"
                "VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s)")
+    
     questions = [
-        "Enter the street #: ",
-        "Enter the street name: ",
-        "Enter the city: ",
-        "Enter the country: ",
-        "Enter the zipcode (A#A#A#): ",
-        "Enter the Housing type: ",
+        ("Enter the street #: ", validators.is_int),
+        ("Enter the street name: ", validators.non_empty),
+        ("Enter the city: ", validators.non_empty),
+        ("Enter the country: ", validators.non_empty),
+        ("Enter the zipcode (A#A#A#): ", validators.is_zipcode),
+        ("Enter the Housing type: ", validators.is_contained(get_building_types())),
     ]
     answers = [str(random.uniform(-90, 90)), str(random.uniform(-180,180))]
     answers += utils.display_form(questions)
 
+    building = answers[-1]
     query = "SELECT price FROM Building WHERE btype = %s"
     cursor = db.get_new_cursor()
-    cursor.execute(query, (answers[-1],))
+    cursor.execute(query, (building,))
     price = cursor.fetchone()[0]
 
-    query = "SELECT atype, price FROM Amenity"
+    query = "SELECT atype, price, category FROM Amenity"
     cursor = db.get_new_cursor()
     cursor.execute(query)
     remaining = cursor.fetchall()
@@ -54,7 +57,6 @@ def create_listing(sin):
     utils.clear_screen()
     print("[Host Toolkit Listing Price Per Day Estimate] $" + str(price))
     while (stop == "y"):
-        print(basic)
         print("Enter the amenities that your listing offers")
         remaining = print_remaining_amenities(remaining, selected)
         if not remaining:
@@ -62,57 +64,45 @@ def create_listing(sin):
             print("All available amenities have been added.")
             print("Final: [Host Toolkit Listing Price Per Day Estimate] $" + str(price))
             print("Confirm creation of listing")
-            choice = input("Input (y/n): ")
+            stop = utils.get_answer("Enter (y/n): ", validators.yes_or_no)
             if choice == "n":
                 notifications.set_notification("Did not create listing.")
                 return
-            elif choice != "y":
-                notifications.set_notification("Invalid entry.")
-                return
             break
 
-        choice = int(input("Select from available amenities (enter 0 to submit the list): "))
+        choice = int(utils.get_answer("Select from available amenities (enter 0 to submit the list): ", validators.in_range(0, len(remaining))))
         while choice > 0 and choice <= len(remaining):
             item = remaining[choice - 1]
             selected.append(item)
             price += item[1]
             if item in basic:
                 basic.remove(item)
-            choice = int(input("Select from available amenities (enter 0 to submit the list): "))
+            choice = int(utils.get_answer("Select from available amenities (enter 0 to submit the list): ", validators.in_range(0, len(remaining))))
 
-        if (choice == 0):
-            print("Changes saved.")
-        else:
-            print("Invalid entry.")
+        print("\033[92mChanges saved.\033[0m")
 
         print("Updated: [Host Toolkit Listing Price Per Day Estimate] $" + str(price))
 
         if basic:
             print("We recommend adding the following essential and safety amenities: ")
-            print_amenities(basic)
+            print_remaining_amenities(basic, [])
             print("Continue adding amenities?")
         else:
             print("All essential and safety amenities have been added. Continue adding amenities?")
-        stop = input("Enter (y/n): ")
+        stop = utils.get_answer("Enter (y/n): ", validators.yes_or_no)
         utils.clear_screen()
     
-    if stop != "y" and stop != "n":
-        print("Invalid entry.")
 
     if stop != "y":
         print("Final: [Host Toolkit Listing Price Per Day Estimate] $" + str(price))
         print("Confirm creation of listing")
-        choice = input("Input (y/n): ")
+        choice = utils.get_answer("Enter (y/n): ", validators.yes_or_no)
         if choice == "n":
             notifications.set_notification("Did not create listing.")
-            return
-        elif choice != "y":
-            notifications.set_notification("Invalid entry.")
             return
 
     cursor = db.get_new_cursor()
     cursor.execute(insert_listing, tuple(answers + [sin]))
-    db.get_connection().commit()
     lid = int(cursor.lastrowid)
 
     if selected:
@@ -123,25 +113,37 @@ def create_listing(sin):
             params += [lid, item[0]]
         cursor = db.get_new_cursor()
         cursor.execute(insert_amenities[:-1], tuple(params))
-        db.get_connection().commit()
+    db.get_connection().commit()
 
     notifications.set_notification("Listing created successfully.")
 
 
-def print_amenities(amenities):
-    count = 1
-    for item in amenities:
-        print(str(count) + ".", item[0] + " [expected price increase: $" + str(item[1]) + "]")
-        count += 1
+def print_remaining_amenities(amenities, selected, price = True):    
+    categories = {"Essential":[], "Safety":[], "Standout":[]}
+    for row in amenities:
+        if row not in selected:
+            category = row[2]
+            categories[category].append(row)
+    
+    print(f"\033[94m{'ESSENTIAL':40}{'SAFETY':40}{'STANDOUT':40}\033[0m")
+    count1 = 0
+    count2 = len(categories["Essential"])
+    count3 = count2 + len(categories["Safety"])
+    def format_amenity(info, count):
+        if info == None:
+            return ""
+        if price:
+            return "{}. {}".format(count+1, info[0])
+        return "{}. {} [+${}]".format(count+1, info[0], info[1])
 
-def print_remaining_amenities(amenities, selected):
-    remaining = []
-    count = 1
-    for item in amenities:
-        if item not in selected:
-            print(str(count) + ".", item[0] + " [expected price increase: $" + str(item[1]) + "]")
-            remaining.append(item)
-            count += 1
+    for c1, c2, c3 in zip_longest(categories["Essential"], categories["Safety"], categories["Standout"]):
+        print(f"{format_amenity(c1, count1) :40}{format_amenity(c2, count2):40}{format_amenity(c3, count3):40}")
+        count1 += 1
+        count2 += 1
+        count3 += 1
+    remaining = categories["Essential"] + categories["Safety"] + categories["Standout"]
+
+
     return remaining
 
 
@@ -150,18 +152,14 @@ def select_listing(sin):
     
     display_listings(sin)
 
-    valid_ids = set(get_listing_ids(sin))
+    valid_ids = get_listing_ids(sin)
     if len(valid_ids) == 0:
-        return
-
-    questions = ["Select an id: "]
+        notifications.set_notification("No listings found")
+        return 0
     
-    lid = None
-    while True:
-        [lid] = utils.display_form(questions)
-        if int(lid) in valid_ids:
-            break
-        print("please enter a valid id")
+    lid = utils.get_answer("Select an id (enter blank to cancel): ", validators.is_contained(valid_ids).or_blank)
+    if lid == "":
+        return 0
     return lid
 
 
@@ -192,8 +190,11 @@ def update_availablity(lid, remove=False):
 
         print(f"Adding availability from {start_date} to {end_date}...")
 
-        print("[Host Toolkit Listing Price Per Day Estimate]: $" + str(get_host_toolkit_pricing(lid)))
-        price = input(f"Please set a price for this timeframe: ")
+        default_price = get_host_toolkit_pricing(lid)
+        print("[Host Toolkit Listing Price Per Day Estimate]: $" + str(default_price))
+        price = utils.get_answer(f"Please set a price for this timeframe (leave blank to use estimated price): ", validators.is_float.or_blank)
+        if price == "":
+            price = str(default_price)
         # insert availability
         insertavailability = ("INSERT IGNORE INTO Availability(date, price, lid)"
                             "VALUES (%s,%s,%s)")
@@ -242,8 +243,11 @@ def update_price(lid):
         notifications.set_notification("Date range must contain only available dates")
         return
 
-    print("[Host Toolkit Listing Price Per Day Estimate]: $" + str(get_host_toolkit_pricing(lid)))
-    price = input(f"Set new price for {start_date} to {end_date}: ")
+    default_price = get_host_toolkit_pricing(lid)
+    print("[Host Toolkit Listing Price Per Day Estimate]: $" + str(default_price))
+    price = utils.get_answer(f"Set new price for {start_date} to {end_date} (leave blank to use estimated price): ", validators.is_float.or_blank)
+    if price == "":
+        price = str(default_price)
     update_pricing = (f"UPDATE Availability SET price = {price} "
                       f"WHERE date >= '{start_date}' AND date <= '{end_date}'")
     
@@ -263,13 +267,7 @@ def host_cancel_booking(lid):
     # flatten list
     booking_ids = {str(row[0]) for row in result}
     
-    while True:
-        id = input("Input a booking to cancel (type 'exit' to cancel): ")
-        if id == 'exit':
-            return
-        if id in booking_ids:
-            break
-        print ("Not a valid id")
+    id = utils.get_answer("Input a booking to cancel (blank to cancel nothing): ", validators.is_contained(booking_ids).or_blank)
     
     cancel_booking = f"UPDATE Booking SET status='HOST_CANCELLED' WHERE bid = {id}"
     cursor = db.get_new_cursor()
@@ -281,73 +279,50 @@ def host_cancel_booking(lid):
 def add_amenity(lid):
     insert = ("INSERT INTO ListingAmenities(atype, lid) VALUES (%s, %s)")
     
-    get_amenities = ("SELECT atype, category FROM Amenity ORDER BY category")
-    existing_amenities = f"SELECT atype From ListingAmenities WHERE lid = {lid}"
+    get_amenities = ("SELECT atype, price, category FROM Amenity ORDER BY category")
+    existing_amenities = f"SELECT atype, price, category  From ListingAmenities NATURAL JOIN Amenity WHERE lid = {lid}"
     
     cursor = db.get_new_cursor()
     cursor.execute(get_amenities)
     result = cursor.fetchall()
-    categories = {"Essential":[], "Safety":[], "Standout":[]}
-    for type, category in result:
-        categories[category].append(type)
-    
+
     cursor = db.get_new_cursor()
     cursor.execute(existing_amenities)
-    result = cursor.fetchall()
-    existing = []
-    for (type, ) in result:
-        existing.append(type)
+    existing = cursor.fetchall()
 
-    print(f"\033[94m{'ESSENTIAL':30}{'SAFETY':30}{'STANDOUT':30}\033[0m")
-    for c1, c2, c3 in zip_longest(categories["Essential"], categories["Safety"], categories["Standout"]):
-        print(f"{c1 or '' :30}{c2 or '':30}{c3 or '':30}")
-    if len(existing) > 0:
-        print("PREVIOUSLY ADDED AMENITIES")
-        print(", ".join(existing))
-    amenities = categories["Essential"] + categories["Safety"] + categories["Standout"]
-    a = input("Choose amenity (Enter nothing to cancel): ")
+    amenities = print_remaining_amenities(result, existing)
+
+    a = utils.get_answer("Choose amenity (Enter nothing to cancel): ", validators.in_range(1, len(amenities)+1).or_blank)
     if a == "":
         notifications.set_notification("Cancelled transaction")
         return
-    if a not in amenities:
-        notifications.set_notification("Must enter a valid amenity")
-        return
-    if a in existing:
-        notifications.set_notification("Already added this amenity")
-        return
     cursor = db.get_new_cursor()
-    cursor.execute(insert, (a, lid))
+    cursor.execute(insert, (amenities[a-1], lid))
     db.get_connection().commit()
     notifications.set_notification(f"Added '{a}'")
 
 @error_notif()
 def remove_amenity(lid):
-    existing_amenities = f"SELECT atype From ListingAmenities WHERE lid = {lid}"
+    existing_amenities = f"SELECT atype, category From ListingAmenities NATURAL JOIN Amenity WHERE lid = {lid}"
     cursor = db.get_new_cursor()
     cursor.execute(existing_amenities)
     result = cursor.fetchall()
-    existing = []
-    for (type, ) in result:
-        existing.append(type)
+    
+    result = print_remaining_amenities(result, [], price = False)
 
-    print("\033[94mAmenities for this listing \033[0m")
-    print("\n".join(existing))
-
-    a = input("Choose an amenity to remove: ")
-    if a not in existing:
-        notifications.set_notification("Must choose a previously added amenity")
-        return
+    a = utils.get_answer("Choose an amenity to remove (blank to cancel): ", validators.in_range(1, len(result)+1).or_blank)
     
     delete = "DELETE FROM ListingAmenities WHERE lid = %s AND atype = %s"
     cursor = db.get_new_cursor()
-    cursor.execute(delete, (lid, a))
+    cursor.execute(delete, (lid, result[a-1]))
     db.get_connection().commit()
-    notifications.set_notification(f"Removed '{a}'")
+    notifications.set_notification(f"Removed '{result[a-1]}'")
 
 
 @error_notif()
 def remove_listing(lid):
-    bookings = (f"SELECT bid FROM Booking WHERE lid = {lid}")
+    today = datetime.date.today()
+    bookings = (f"SELECT bid FROM Booking WHERE lid = {lid} AND end_date >= '{utils.date_to_str(today)}' AND status = 'ACTIVE' ")
     cursor = db.get_new_cursor()
     cursor.execute(bookings)
     result = cursor.fetchall()
@@ -357,7 +332,7 @@ def remove_listing(lid):
         return View.LISTING
     else:
         print("Confirm deletion of listing: ")
-        choice = input("Input (y/n): ")
+        choice = utils.get_answer("Input (y/n): ", validators.yes_or_no)
         if (choice != "y"):
             notifications.set_notification("Did not remove listing.")
             return View.LISTING
@@ -482,20 +457,23 @@ def get_host_toolkit_pricing(lid):
         price += result
     return price
 
-# TODO add error checking
+def get_building_types():
+    query = "SELECT btype FROM Building"
+    cursor = db.get_new_cursor()
+    cursor.execute(query)
+    return [b for (b,) in cursor.fetchall()]
+
 @error_notif()
-def review_renter(lid):
+def host_review_renter(lid, bid):
     display_bookings(lid)
 
-    bid = input("Enter a booking id: ")
-    review = input("Enter a review for the renter (text): ")
-    rating = input("Enter a rating for the renter (1-5): ")
+    questions = [
+        ("Enter a review for the renter (text): ", validators.non_empty),
+        ("Enter a rating for the renter (1-5): ", validators.is_rating)
+    ]
+    review, rating = utils.display_form(questions)
 
-    updatereview = "UPDATE Booking SET host_comment = %s WHERE bid = %s"
+    updatereview = "UPDATE Booking SET host_comment = %s, host_rating = %s WHERE bid = %s"
     cursor = db.get_new_cursor()
-    cursor.execute(updatereview, (review, int(bid)))
-    
-    updaterating = "UPDATE Booking SET host_rating = %s WHERE bid = %s"
-    
-    cursor = db.get_new_cursor()
-    cursor.execute(updaterating, (int(rating), int(bid)))
+    cursor.execute(updatereview, (review, rating, bid))
+    notifications.set_notification("Successfully updated review")

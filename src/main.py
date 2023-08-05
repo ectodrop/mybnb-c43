@@ -126,7 +126,7 @@ def manage_listing(lid):
   elif choice == "8":
     listing.remove_amenity(lid)
   elif choice == "9":
-    listing.review_renter(lid)
+    listing.host_review_renter(lid)
   elif choice == "10":
     return View.HOST_DASH
   else:

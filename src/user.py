@@ -2,17 +2,18 @@ import database as db
 from views import View
 import notifications
 import utils
+import validators
 from decorators import error_notif
-
+from datetime import date
 @error_notif(default=0)
 def create_account():
     questions = [
-        "Enter your name: ",
-        "Enter your Social Insurance Number (SIN): ",
-        "Enter your password: ",
-        "Enter your date of birth (yyyy-mm-dd): ",
-        "Enter your occupation (leave blank for none): ",
-        "Enter your address: ",
+        ("Enter your name: ", validators.non_empty),
+        ("Enter your Social Insurance Number (SIN): ", validators.is_int),
+        ("Enter your password: ", validators.non_empty),
+        ("Enter your date of birth (yyyy-mm-dd): ", validators.is_date),
+        ("Enter your occupation (leave blank for none): ", validators.is_string),
+        ("Enter your address: ", validators.non_empty),
     ]
     insert_user = ("INSERT INTO User "
                "(name, sin, password, birthday, occupation, address)"
@@ -20,7 +21,17 @@ def create_account():
     find_user = ("SELECT name FROM User WHERE sin = %s")
 
     answers = utils.display_form(questions)
-
+    birthdate = answers[3]
+    try:
+        age = (date.today() - utils.str_to_date(birthdate)).days / 365
+    except:
+        notifications.set_notification("Invalid birthdate")
+        return 0
+    
+    if age < 18:
+        notifications.set_notification("Must be 18 or older to create an account")
+        return 0
+    
     cursor = db.get_new_cursor()
     cursor.execute(find_user, (answers[1],))
 
@@ -42,8 +53,8 @@ def create_account():
 def login():
     select_user = ("SELECT name FROM User WHERE sin = %s AND password = %s")
     questions = [
-            "Enter your Social Insurance Number (SIN): ",
-            "Enter your password: ",
+            ("Enter your Social Insurance Number (SIN): ", validators.is_string),
+            ("Enter your password: ", validators.is_string),
         ]
     answers = utils.display_form(questions)
 
@@ -62,12 +73,9 @@ def login():
 def delete_account(sin):
 
     print("Confirm deletion of account?")
-    choice = input("Input (y/n): ")
+    choice = utils.get_answer("Input (y/n): ", validators.yes_or_no)
     if (choice == "n"):
         notifications.set_notification("Did not delete account.")
-        return
-    elif (choice != "y"):
-        notifications.set_notification("Invalid entry.")
         return
 
     delete_user = ("DELETE FROM User WHERE sin = %s")

@@ -66,6 +66,7 @@ def display_calendar(bookings, availabilities, limit=True):
             cal.calevent_create(date, "Available", "free")
             cal.tag_config("free", background="green")
         else:
+            bid = date_tags[date]
             cal.calevent_create(date, f"Booking#{bid}", str(bid))
             cal.tag_config(bid, background="red")
 
