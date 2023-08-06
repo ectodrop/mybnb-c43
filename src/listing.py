@@ -25,6 +25,8 @@ def create_listing(sin):
                "VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s)")
     
     questions = [
+        ("Enter the longitude: ", validators.in_range(-90, 90)),
+        ("Enter the latitude: ", validators.in_range(-180, 180)),
         ("Enter the street #: ", validators.is_int),
         ("Enter the street name: ", validators.non_empty),
         ("Enter the city: ", validators.non_empty),
@@ -32,8 +34,7 @@ def create_listing(sin):
         ("Enter the zipcode (A#A#A#): ", validators.is_zipcode),
         ("Enter the Housing type: ", validators.is_contained(get_building_types())),
     ]
-    answers = [str(random.uniform(-90, 90)), str(random.uniform(-180,180))]
-    answers += utils.display_form(questions)
+    answers = utils.display_form(questions)
 
     building = answers[-1]
     query = "SELECT price FROM Building WHERE btype = %s"
@@ -132,7 +133,7 @@ def print_remaining_amenities(amenities, selected, price = True):
     def format_amenity(info, count):
         if info == None:
             return ""
-        if price:
+        if not price:
             return "{}. {}".format(count+1, info[0])
         return "{}. {} [+${}]".format(count+1, info[0], info[1])
 
@@ -258,22 +259,17 @@ def update_price(lid):
 
 
 @error_notif()
-def host_cancel_booking(lid):
-    display_bookings(lid)
-    bookings = (f"SELECT bid FROM Booking WHERE lid = {lid}")
-    cursor = db.get_new_cursor()
-    cursor.execute(bookings)
-    result = cursor.fetchall()
-    # flatten list
-    booking_ids = {str(row[0]) for row in result}
+def host_cancel_booking(valid_ids):
+    bid = utils.get_answer("Input a booking to cancel (blank to cancel nothing): ", validators.is_contained(valid_ids).or_blank)
+    if bid == "":
+        notifications.set_notification("Cancelled nothing")
+        return
     
-    id = utils.get_answer("Input a booking to cancel (blank to cancel nothing): ", validators.is_contained(booking_ids).or_blank)
-    
-    cancel_booking = f"UPDATE Booking SET status='HOST_CANCELLED' WHERE bid = {id}"
+    cancel_booking = f"UPDATE Booking SET status='HOST_CANCELLED' WHERE bid = {bid}"
     cursor = db.get_new_cursor()
     cursor.execute(cancel_booking)
     db.get_connection().commit()
-    notifications.set_notification(f"Successfully cancelled booking#{id}")
+    notifications.set_notification(f"Successfully cancelled booking#{bid}")
 
 @error_notif()
 def add_amenity(lid):
@@ -294,29 +290,35 @@ def add_amenity(lid):
 
     a = utils.get_answer("Choose amenity (Enter nothing to cancel): ", validators.in_range(1, len(amenities)+1).or_blank)
     if a == "":
-        notifications.set_notification("Cancelled transaction")
+        notifications.set_notification("Did not add an amenity")
         return
+    a = int(a)-1
     cursor = db.get_new_cursor()
-    cursor.execute(insert, (amenities[a-1], lid))
+    cursor.execute(insert, (amenities[a][0], lid))
     db.get_connection().commit()
-    notifications.set_notification(f"Added '{a}'")
+    notifications.set_notification(f"Added '{amenities[a][0]}'")
 
 @error_notif()
 def remove_amenity(lid):
-    existing_amenities = f"SELECT atype, category From ListingAmenities NATURAL JOIN Amenity WHERE lid = {lid}"
+    existing_amenities = f"SELECT atype, price, category From ListingAmenities NATURAL JOIN Amenity WHERE lid = {lid}"
     cursor = db.get_new_cursor()
     cursor.execute(existing_amenities)
     result = cursor.fetchall()
     
-    result = print_remaining_amenities(result, [], price = False)
+    result = print_remaining_amenities(result, [], price=False)
 
-    a = utils.get_answer("Choose an amenity to remove (blank to cancel): ", validators.in_range(1, len(result)+1).or_blank)
+    a = utils.get_answer("Choose an amenity to remove (enter blank to cancel): ", validators.in_range(1, len(result)).or_blank)
     
+    if a == "":
+        notifications.set_notification("No amenity was removed")
+        return
+    a = int(a)-1
+
     delete = "DELETE FROM ListingAmenities WHERE lid = %s AND atype = %s"
     cursor = db.get_new_cursor()
-    cursor.execute(delete, (lid, result[a-1]))
+    cursor.execute(delete, (lid, result[a][0]))
     db.get_connection().commit()
-    notifications.set_notification(f"Removed '{result[a-1]}'")
+    notifications.set_notification(f"Removed '{result[a][0]}' from amenities")
 
 
 @error_notif()
@@ -361,20 +363,47 @@ def display_listings(sin):
         (lid, streetnum, streetname, city, country, zipcode, btype ) = row
         print(f"{lid:<5}{streetnum:10}{streetname:15}{city:15}{country:15}{zipcode:10}{btype:15}")
 
-
+@error_notif(default=[])
 # prints all bookings for listing LID
-def display_bookings(lid):
-    bookings = (f"SELECT bid, name, start_date, end_date FROM Booking NATURAL JOIN User WHERE lid = {lid}")
+def display_bookings(lid, past = False):
+    today = utils.date_to_str(datetime.date.today())
+    if past:
+        bookings = ("SELECT bid, name, start_date, end_date FROM Booking NATURAL JOIN User "
+                    f"WHERE lid = {lid} AND end_date < '{today}' AND status = 'ACTIVE'")
+    else:
+        bookings = (f"SELECT bid, name, start_date, end_date FROM Booking NATURAL JOIN User WHERE lid = {lid} and end_date >= '{today}' AND status = 'ACTIVE'")
     cursor = db.get_new_cursor()
     cursor.execute(bookings)
     result = cursor.fetchall()
-    print(f"LISTING#{lid} BOOKINGS")
     print(f"{'booking id':15}{'name':20}{'start date':15}{'end date':15}")
+    if not result:
+        print(f"......No {'past uncancelled' if past else 'current'} bookings found......")
+    valid_ids = []
     for row in result:
         (bid, name, start, end) = row
+        valid_ids.append(bid)
         print(f"{bid:<15}{name:20}{utils.date_to_str(start):15}{utils.date_to_str(end):15}")
+    
+    return valid_ids
 
-  
+# print all bookings cancelled by either host or renter
+@error_notif()
+def display_cancelled_bookings(lid):
+    bookings = ("SELECT bid, name, start_date, end_date, status FROM Booking NATURAL JOIN User "
+                "WHERE status = 'HOST_CANCELLED' OR status = 'RENTER_CANCELLED'")
+    cursor = db.get_new_cursor()
+    cursor.execute(bookings)
+    result = cursor.fetchall()
+    if len(result) == 0:
+        notifications.set_notification("No cancelled bookings found")
+        return
+    print(f"LISTING#{lid} CANCELLED BOOKINGS")
+    print(f"{'booking id':15}{'name':20}{'start date':15}{'end date':15}{'status':15}")
+    for row in result:
+        (bid, name, start, end, status) = row
+        print(f"{bid:<15}{name:20}{utils.date_to_str(start):15}{utils.date_to_str(end):15}{status:15}")
+    input("Press enter to continue: ")
+
 # returns a list of ids for each listing associated with the user
 def get_listing_ids(sin):
     listings = ("SELECT lid FROM Listing WHERE sin = %s")
@@ -464,13 +493,27 @@ def get_building_types():
     return [b for (b,) in cursor.fetchall()]
 
 @error_notif()
-def host_review_renter(lid, bid):
-    display_bookings(lid)
+def host_review_renter(valid_bids):
+    bid = utils.get_answer("Enter the renter's booking # (enter blank to cancel): ", validators.is_contained(valid_bids).or_blank)
+    if bid == "":
+        notifications.set_notification("Did not update review")
+        return
+    previous = f"SELECT host_rating, host_comment FROM Booking WHERE bid = {bid}"
+    cursor = db.get_new_cursor()
+    cursor.execute(previous)
+    result = cursor.fetchone()[0]
+    if result:
+        host_rating, host_comment = result
+        print(f"Your previous comment: {host_comment}")
+        print(f"Your previous rating: {host_rating}")
 
+    print("")
     questions = [
         ("Enter a review for the renter (text): ", validators.non_empty),
         ("Enter a rating for the renter (1-5): ", validators.is_rating)
     ]
+
+    
     review, rating = utils.display_form(questions)
 
     updatereview = "UPDATE Booking SET host_comment = %s, host_rating = %s WHERE bid = %s"

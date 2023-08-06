@@ -2,14 +2,15 @@ import database as db
 import utils
 import notifications
 import windows
+import validators
 from decorators import error_notif
 import nltk
 
 # number of bookings in a daterange in a city (can drill down by zipcode)
 @error_notif()
 def bookings_by_city():
-    city = input("Input a city: ")
-    zipcode = input("Input a zipcode (leave blank for city only): ")
+    city = utils.get_answer("Input a city: ", validators.is_contained(get_all_cities()))
+    zipcode = utils.get_answer("Input a zipcode (leave blank for city only): ", validators.is_zipcode.or_blank)
     start, end = windows.display_calendar([], [], limit=False)
     if not start or not end:
         notifications.set_notification("Date not selected")
@@ -39,7 +40,7 @@ def listings_per_country():
     result = cursor.fetchall()
     print("LISTING COUNTS BY COUNTRY")
     for country, count in result:
-        print(f"{country}: {count}")
+        print(f"  {country}: {count}")
     input("Press Enter to continue: ")
 
 
@@ -53,7 +54,7 @@ def listings_per_country_city():
     result = cursor.fetchall()
     print("LISTING COUNTS BY CITY")
     for country, city, count in result:
-        print(f"{country} {city}: {count}")
+        print(f"  {country} {city}: {count}")
     input("Press Enter to continue: ")
 
 
@@ -67,15 +68,18 @@ def listings_per_country_city_zip():
     result = cursor.fetchall()
     print("LISTING COUNTS BY ZIPCODE")
     for country, city, zipcode, count in result:
-        print(f"{country} {city} {zipcode}: {count}")
+        print(f"  {country} {city} {zipcode}: {count}")
     input("Press Enter to continue: ")
 
 
 # order hosts by number of listings in a country (can drill down to city)
 @error_notif()
 def rank_host_by_listing():
-    country = input("Enter a country: ")
-    city = input("Enter a city (leave blank for country only): ")
+    country = utils.get_answer("Enter a country: ", validators.is_contained(get_all_countries()))
+    city = utils.get_answer(
+        "Enter a city (leave blank for country only): ",
+        validators.is_contained(get_all_cities(country=country)).or_blank
+    )
 
     clause = "country = %s"
     args = (country,)
@@ -90,14 +94,17 @@ def rank_host_by_listing():
     result = cursor.fetchall()
     print("LISTINGS COUNTS BY HOST")
     for sin, name, count in result:
-        print(f"{sin} {name}: {count}")
+        print(f"  {sin} {name}: {count}")
     input("Press Enter to continue: ")
 
 # retrieve the "commericial hosts" that own more than 10% of the listings in an area
 @error_notif()
 def get_commercial_hosts():
-    country = input("Enter a country: ")
-    city = input("Enter a city (leave blank for country only): ")
+    country = utils.get_answer("Enter a country: ", validators.is_contained(get_all_countries()))
+    city = utils.get_answer(
+        "Enter a city (leave blank for country only): ",
+        validators.is_contained(get_all_cities(country=country)).or_blank
+    )
 
     clause = "country = %s"
     args = (country,)
@@ -117,9 +124,10 @@ def get_commercial_hosts():
     cursor = db.get_new_cursor()
     cursor.execute(report, args)
     result = cursor.fetchall()
-    print(f"COMMERCIAL HOSTS IN {country} {city}: %age of listings")
+    print(f"COMMERCIAL HOSTS in {country} {city}")
+    print(f"{'sin':5}{'name':20}{'listings':<15}{'percentage of listings':15}")
     for sin, name, count in result:
-        print(f"{sin} {name}: {(count/total)*100:.2f}%")
+        print(f"{sin:<5}{name:20}{count:<15}{(count/total)*100:.2f}%")
     input("Press Enter to continue: ")
 
 # rank renters by number of bookings in a time period
@@ -140,7 +148,7 @@ def rank_renter_by_bookings():
     
     print(f"BOOKINGS FROM {start} to {end}")
     for sin, name, count in result:
-        print(f"{sin} {name}: {count}")
+        print(f"  {sin} {name}: {count}")
     input("Press Enter to continue: ")
 
 # print renters by number of bookings cancelled
@@ -155,7 +163,7 @@ def rank_renter_by_cancel():
         return
     print("RENTERS: #CANCELLED")
     for sin, name, count in result:
-        print(f"{sin} {name}: {count}")
+        print(f"  {sin} {name}: {count}")
     input("Press Enter to continue: ")
 
 # print renters by number of bookings cancelled
@@ -171,7 +179,7 @@ def rank_host_by_cancel():
         return
     print("HOSTS: #CANCELLED")
     for sin, count in result:
-        print(f"{sin}: {count}")
+        print(f"  {sin}: {count}")
     input("Press Enter to continue: ")
 
 # generate a list of popular nouns used in each listing's reviews
@@ -184,10 +192,9 @@ def get_popular_listing_nouns():
     cursor.execute(report)
     result = cursor.fetchall()
     for lid, text in result:
-        print(f"\033[94mListing#{lid}\033[0m")
         if text == None:
-            print("No reviews")
             continue
+        print(f"\033[94mListing#{lid}\033[0m")
         tokenized = nltk.word_tokenize(text)
         # get all the nouns in text
         nouns = [word.lower() for (word, pos) in nltk.pos_tag(tokenized) if(pos[:2] == 'NN')]
@@ -196,11 +203,27 @@ def get_popular_listing_nouns():
             counts[n] = counts.get(n, 0) + 1
         # print out all the nouns in 1 line
         print(f"All words: {', '.join(sorted(counts.keys()))}")
-        print("Frequent (>1 occurances): ")
+        print("  Frequent (>1 occurances): ")
         # only print the nouns (with their count) that have more than 1 occurance
         for count, noun in sorted([(v, k) for k,v in counts.items()], reverse=True):
             if count < 2:
                 break
-            print(f"{noun}: {count}")
+            print(f"    {noun}: {count}")
     input("Press Enter to continue: ")
-        
+
+def get_all_countries():
+    countries = "SELECT DISTINCT country FROM Listing"
+    cursor = db.get_new_cursor()
+    cursor.execute(countries)
+    result = cursor.fetchall()
+    return [row[0] for row in result]
+
+def get_all_cities(country:str =None):
+    if country:
+        cities = f"SELECT DISTINCT city FROM Listing WHERE country = '{country}'"
+    else:
+        cities = f"SELECT DISTINCT city FROM Listing"
+    cursor = db.get_new_cursor()
+    cursor.execute(cities)
+    result = cursor.fetchall()
+    return [row[0] for row in result]

@@ -50,10 +50,9 @@ def create_booking(sin, lid):
     cursor = db.get_new_cursor()
     cursor.execute(retrieve_user, (sin,))
     (creditcard,) = cursor.fetchone()
-
-    while not creditcard:
+    if not creditcard:
         print("Please enter your credit card number: ")
-        creditcard = input("Credit Card Number : ")
+        creditcard = utils.get_answer("Credit Card Number : ", validators.non_empty)
 
     update_user = ("UPDATE User SET creditcard = %s WHERE sin = %s")
     cursor = db.get_new_cursor()
@@ -157,10 +156,10 @@ def filter_search(search_query, original, for_distance):
         notifications.set_notification("Displaying results with updated filters.")
         amenities = print_amenities_list()
         selected = []
-        choice = int(input("Select amenities (enter 0 to submit the list): "))
+        choice = int(utils.get_answer("Select amenities (enter 0 to submit the list): ", validators.in_range(0, len(amenities))))
         while choice > 0 and choice <= len(amenities):
             selected.append(amenities[choice - 1])
-            choice = int(input("Select amenities (enter 0 to submit the list): "))
+            choice = int(utils.get_answer("Select amenities (enter 0 to submit the list): ", validators.in_range(0, len(amenities))))
         if (choice > len(amenities) or choice < 0):
             print("Invalid entry.")
 
@@ -480,12 +479,8 @@ def confirm_responses(responses, bid, existing_review):
 
 @error_notif()
 def post_review(valid_ids):
-    questions = [
-        ("Enter a booking ID: ", None)
-        ("Enter a rating from 1 to 5 (leave blank for none): ", None),
-        ("Enter a comment (leave blank for none): ", None)
-    ]
-    [bid] = utils.display_form(questions[:1])
+    bid = utils.get_answer("Enter a booking ID: ", validators.is_contained(valid_ids))
+
     if (int(bid) not in valid_ids):
         notifications.set_notification("Invalid booking ID. Please try again.")
         return
@@ -519,10 +514,8 @@ def post_review(valid_ids):
             return
 
 
-        rating = 0
-        while rating > 5 or rating < 1:
-            rating = int(input(questions[1]))
-        comment = input(questions[2])
+        rating = int(utils.get_answer("Enter a rating from 1 to 5 (leave blank for none): ", validators.is_rating.or_blank))
+        comment = utils.get_answer("Enter a comment (leave blank for none): ", validators.is_string)
 
         params = confirm_responses([rating, comment], bid, existing_review)
 
