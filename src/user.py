@@ -70,7 +70,7 @@ def login():
     return answers[0]
 
 @error_notif()
-def delete_account(sin):
+def delete_account(sin, curr_view):
     today = utils.date_to_str(date.today())
     bookings = f"SELECT * FROM Booking WHERE sin = {sin} AND end_date >= '{today}' AND status = 'ACTIVE'"
     cursor = db.get_new_cursor()
@@ -78,23 +78,24 @@ def delete_account(sin):
     mybookings = cursor.fetchone()
     # all active bookings of listings that SIN owns
     if mybookings != None:
-        notifications.set_notification("Cannot delete an account with active future bookings")
-        return
+        notifications.set_notification("Cannot delete an account with active future bookings.")
+        return curr_view
     listingbookings = f"SELECT * FROM Booking as b INNER JOIN Listing as l ON b.lid = l.lid WHERE l.sin = {sin} AND end_date >= '{today}' AND status = 'ACTIVE'"
     cursor = db.get_new_cursor()
     cursor.execute(listingbookings)
     mylistingbookings = cursor.fetchone()
     if mylistingbookings != None:
-        notifications.set_notification("Cannot delete an account with listings that have active bookings")
-        return
+        notifications.set_notification("Cannot delete an account with listings that have active bookings.")
+        return curr_view
     
     print("Confirm deletion of account?")
     choice = utils.get_answer("Input (y/n): ", validators.yes_or_no)
     if (choice == "n"):
         notifications.set_notification("Did not delete account.")
-        return
+        return curr_view
 
     delete_user = ("DELETE FROM User WHERE sin = %s")
     db.get_new_cursor().execute(delete_user, (sin,))
     db.get_connection().commit()
     notifications.set_notification("Account deleted.")
+    return View.WELCOME

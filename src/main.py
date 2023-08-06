@@ -55,8 +55,7 @@ def client_dashboard(sin):
   elif choice == "5":
     return View.WELCOME
   elif choice == "10":
-    user.delete_account(sin)
-    return View.WELCOME
+    return user.delete_account(sin, View.CLIENT_DASH)
   else:
     notifications.set_notification("Invalid entry.")
   
@@ -88,8 +87,7 @@ def host_dashboard(sin):
   elif choice == "5":
     return View.WELCOME
   elif choice == "10":
-    user.delete_account(sin)
-    return View.WELCOME
+    return user.delete_account(sin, View.HOST_DASH)
   else:
     notifications.set_notification("Invalid entry.")
     return View.HOST_DASH

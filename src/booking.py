@@ -409,10 +409,7 @@ def display_bookings(sin, is_past):
 
 
 def client_cancel_booking(valid_ids):
-    questions = [
-        "Enter a booking id: "
-    ]
-    [bid] = utils.display_form(questions)
+    bid = utils.get_answer("Enter a booking ID: ", validators.is_contained(valid_ids))
 
     if (int(bid) not in valid_ids):
         notifications.set_notification("Invalid booking ID. Please try again.")
@@ -502,6 +499,7 @@ def post_review(valid_ids):
         print("Please select an option: ")
         print("1. Update review for host")
         print("2. Update review for listing")
+        print("3. Return to all past bookings")
         choice = input("Enter a choice: ")
         if choice == "1":
             update_review = ("UPDATE Booking SET renter_host_rating = %s, renter_host_comment = %s WHERE bid = %s")
@@ -509,6 +507,9 @@ def post_review(valid_ids):
         elif choice == "2":
             update_review = ("UPDATE Booking SET renter_listing_rating = %s, renter_listing_comment = %s WHERE bid = %s")
             existing_review = (listing_rating, listing_comment)
+        elif choice == "3":
+            notifications.set_notification("Back to viewing past bookings.")
+            return
         else:
             notifications.set_notification("Invalid entry.")
             return
