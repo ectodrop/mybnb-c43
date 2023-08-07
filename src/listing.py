@@ -264,11 +264,22 @@ def host_cancel_booking(valid_ids):
     if bid == "":
         notifications.set_notification("Cancelled nothing")
         return
-    
+
     cancel_booking = f"UPDATE Booking SET status='HOST_CANCELLED' WHERE bid = {bid}"
     cursor = db.get_new_cursor()
     cursor.execute(cancel_booking)
     db.get_connection().commit()
+
+    get_booking = f"SELECT lid, start_date, end_date FROM Booking WHERE bid = {bid}"
+    cursor = db.get_new_cursor()
+    cursor.execute(get_booking)
+    params = cursor.fetchone()
+
+    update_availablity = ("UPDATE Availability SET booked = False WHERE lid = %s AND date >= %s and date <= %s")
+    cursor = db.get_new_cursor ()
+    cursor.execute(update_availablity, params)
+    db.get_connection().commit()
+
     notifications.set_notification(f"Successfully cancelled booking#{bid}")
 
 @error_notif()
@@ -296,7 +307,7 @@ def add_amenity(lid):
     cursor = db.get_new_cursor()
     cursor.execute(insert, (amenities[a][0], lid))
     db.get_connection().commit()
-    notifications.set_notification(f"Added '{amenities[a][0]}'")
+    notifications.set_notification(f"Added '{amenities[a][0]}'. Updated Host Toolkit Price Estimate: ${get_host_toolkit_pricing(lid)}")
 
 @error_notif()
 def remove_amenity(lid):
@@ -318,7 +329,7 @@ def remove_amenity(lid):
     cursor = db.get_new_cursor()
     cursor.execute(delete, (lid, result[a][0]))
     db.get_connection().commit()
-    notifications.set_notification(f"Removed '{result[a][0]}' from amenities")
+    notifications.set_notification(f"Removed '{result[a][0]}'. Updated Host Toolkit Price Estimate: ${get_host_toolkit_pricing(lid)}")
 
 
 @error_notif()
@@ -442,7 +453,7 @@ def get_bookings_dates(lid):
 
 # if there is a booking within the specified daterange for the listing
 def is_booked(lid, start, end):
-    check_dates = (f"SELECT * FROM Booking WHERE lid = {lid} AND "
+    check_dates = (f"SELECT * FROM Booking WHERE lid = {lid} AND status = 'ACTIVE' AND "
                     f"((start_date <= '{start}' AND end_date >= '{start}') OR "
                     f"(start_date <= '{end}' AND end_date >= '{end}') OR "
                     f"(start_date >= '{start}' AND end_date <= '{end}') OR "
@@ -473,6 +484,7 @@ def exists_availability(lid, start, end):
 
 
 # get the estimated price per day calculated by the host toolkit
+@error_notif(default=0)
 def get_host_toolkit_pricing(lid):
     query = (f"SELECT price FROM Building NATURAL JOIN Listing WHERE lid = {lid}")
     cursor = db.get_new_cursor()
@@ -481,9 +493,9 @@ def get_host_toolkit_pricing(lid):
     query = (f"SELECT sum(price) FROM ListingAmenities NATURAL JOIN Amenity WHERE lid = {lid}")
     cursor = db.get_new_cursor()
     cursor.execute(query)
-    result = cursor.fetchone()[0]
+    result = cursor.fetchone()
     if result:
-        price += result
+        price += result[0]
     return price
 
 def get_building_types():
@@ -498,25 +510,43 @@ def host_review_renter(valid_bids):
     if bid == "":
         notifications.set_notification("Did not update review")
         return
-    previous = f"SELECT host_rating, host_comment FROM Booking WHERE bid = {bid}"
+    previous = f"SELECT host_rating, host_comment, end_date FROM Booking WHERE bid = {bid}"
     cursor = db.get_new_cursor()
     cursor.execute(previous)
-    result = cursor.fetchone()[0]
-    if result:
-        host_rating, host_comment = result
-        print(f"Your previous comment: {host_comment}")
-        print(f"Your previous rating: {host_rating}")
+    (host_rating, host_comment, end_date) = cursor.fetchone()
 
+    curr_date = datetime.date.today()
+    days_diff = (curr_date - end_date).days
+    if (days_diff > 180 or days_diff < 0):
+            notifications.set_notification("Cannot update reviews/ratings of stays that have not been completed within the past 180 days.")
+            return
+
+    print(f"Your previous rating: {host_rating if host_rating else '-'}")
+    print(f"Your previous comment: {host_comment if host_comment else '-'}")
     print("")
-    questions = [
-        ("Enter a review for the renter (text): ", validators.non_empty),
-        ("Enter a rating for the renter (1-5): ", validators.is_rating)
-    ]
 
-    
-    review, rating = utils.display_form(questions)
+    rating = utils.get_answer("Enter a rating from 1 to 5 (leave blank for none): ", validators.is_rating.or_blank)
+    comment = utils.get_answer("Enter a comment (leave blank for none): ", validators.is_string)
 
-    updatereview = "UPDATE Booking SET host_comment = %s, host_rating = %s WHERE bid = %s"
+    responses = [rating, comment]
+    existing_review = (host_rating, host_comment)
+    types = ("rating", "comment")
+    params = []
+    for i in range(2):
+        print("Replace new", types[i], "with previous", types[i] + "?")
+        choice = utils.get_answer("Input (y/n): ", validators.yes_or_no)
+        if (choice == "y"):
+            params.append(responses[i])
+        elif (choice == "n"):
+            params.append(existing_review[i])
+        else:
+            notifications.set_notification("Invalid entry.")
+            break
+    params += [bid]
+    args = (int(params[0]) if params[0] else None, params[1] if params[1] else None, int(bid))
+
+    updatereview = "UPDATE Booking SET host_rating = %s, host_comment = %s WHERE bid = %s"
     cursor = db.get_new_cursor()
-    cursor.execute(updatereview, (review, rating, bid))
+    cursor.execute(updatereview, args)
+    db.get_connection().commit()
     notifications.set_notification("Successfully updated review")

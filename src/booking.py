@@ -51,8 +51,8 @@ def create_booking(sin, lid):
     cursor.execute(retrieve_user, (sin,))
     (creditcard,) = cursor.fetchone()
     if not creditcard:
-        print("Please enter your credit card number: ")
-        creditcard = utils.get_answer("Credit Card Number : ", validators.non_empty)
+        print("Please enter your 16-digit credit card number: ")
+        creditcard = utils.get_answer("Credit Card Number : ", validators.is_valid_cc)
 
     update_user = ("UPDATE User SET creditcard = %s WHERE sin = %s")
     cursor = db.get_new_cursor()
@@ -65,10 +65,16 @@ def create_booking(sin, lid):
     cursor.execute(insert_booking, params)
     db.get_connection().commit()
 
+    update_availablity = ("UPDATE Availability SET booked = True WHERE lid = %s AND date >= %s and date <= %s")
+    params = (lid, start_date, end_date)
+    cursor = db.get_new_cursor ()
+    cursor.execute(update_availablity, params)
+    db.get_connection().commit()
+
     notifications.set_notification("Booking created successfully.")
 
 
-@error_notif()
+@error_notif(default=[])
 def print_amenities_list():
     print("AMENITIES")
     amenities = ["Wifi", "TV", "Kitchen", "Washer", "AC", "Free Parking", "Paid Parking", "Dedicated Workspace", 
@@ -104,7 +110,7 @@ def listing_options(sin, valid_ids):
         listing_info(sin, int(lid))
 
 
-@error_notif()
+@error_notif(default={})
 def display_listings(get_listings, answers, show_distance):
     cursor = db.get_new_cursor()
     cursor.execute(get_listings, tuple(answers))
@@ -131,6 +137,7 @@ def display_listings(get_listings, answers, show_distance):
     return valid_ids
 
 
+@error_notif(default=("", []))
 def filter_search(search_query, original, for_distance):
     additional_query = "date >= %s"
     tmr_date = utils.date_to_str(date.today() + timedelta(1))
@@ -232,7 +239,7 @@ def search_by_addr(sin):
     [streetnum, streetname, city, country, zipcode] = utils.display_form(questions)
     original = ["SELECT lid, streetnum, streetname, city, country, zipcode, btype, name, avg, min, max FROM",
                     "(SELECT * FROM Listing NATURAL JOIN User WHERE sin != " + str(sin) + " AND (streetnum = %s OR %s = '') AND (streetname = %s OR %s = '') AND (city = %s OR %s = '') AND (country = %s OR %s = '') AND (zipcode = %s OR %s = '')) AS S NATURAL JOIN",
-                    "(SELECT lid, avg(price) AS avg, min(price) AS min, max(price) AS max FROM (SELECT * from Availability WHERE",
+                    "(SELECT lid, avg(price) AS avg, min(price) AS min, max(price) AS max FROM (SELECT * from Availability WHERE not booked AND ",
                     "date >= %s",
                     ") AS R GROUP BY lid) AS T",
                 ]
@@ -248,7 +255,7 @@ def search_by_zipcode(sin):
     zipcode = utils.get_answer("Enter a zipcode: ", validators.is_zipcode)
     original = ["SELECT lid, streetnum, streetname, city, country, zipcode, btype, name, avg, min, max FROM",
                     "(SELECT * FROM Listing NATURAL JOIN User WHERE sin != " + str(sin) + ''' AND zipcode like %s"___") AS S NATURAL JOIN''',
-                    "(SELECT lid, avg(price) AS avg, min(price) AS min, max(price) AS max FROM (SELECT * from Availability WHERE",
+                    "(SELECT lid, avg(price) AS avg, min(price) AS min, max(price) AS max FROM (SELECT * from Availability WHERE not booked AND ",
                     "date >= %s",
                     ") AS R GROUP BY lid) AS T"
                 ]
@@ -270,7 +277,7 @@ def search_by_location(sin):
     dist_params = [float(lati), float(lati), float(longi), float(dist) if dist else 50.0 ]
     original = ["SELECT lid, streetnum, streetname, city, country, zipcode, btype, name, avg, min, max, 12742*temp*sin(SQRT(temp)) AS distance FROM",
                     "(SELECT lid, streetnum, streetname, city, country, zipcode, btype, name, POWER(sin((latitude - %s)/2), 2) + cos(latitude)*cos(%s)*POWER(sin((longitude - %s)/2), 2) AS temp FROM Listing NATURAL JOIN User WHERE sin != " + str(sin) + ") AS S NATURAL JOIN",
-                    "(SELECT lid, avg(price) AS avg, min(price) AS min, max(price) AS max FROM (SELECT * from Availability WHERE",
+                    "(SELECT lid, avg(price) AS avg, min(price) AS min, max(price) AS max FROM (SELECT * from Availability WHERE not booked AND ",
                     "date >= %s",
                     ") AS R GROUP BY lid) AS T",
                     "WHERE 12742*temp*sin(SQRT(temp)) <= %s",
@@ -281,7 +288,7 @@ def search_by_location(sin):
     search_loop(sin, original, original_params, True)
 
 
-@error_notif()
+@error_notif(default=False)
 def sort_by_price(search_query, sorted, for_distance):
     utils.clear_screen()
     print("Please select an option: ")
@@ -317,7 +324,7 @@ def browse_listings(sin):
     utils.clear_screen()
     search_query = ["SELECT DISTINCT lid, streetnum, streetname, city, country, zipcode, btype, name, avg, min, max FROM",
                     "(SELECT * FROM Listing NATURAL JOIN User WHERE sin != " + str(sin) + ") AS S NATURAL JOIN",
-                    "(SELECT lid, avg(price) AS avg, min(price) AS min, max(price) AS max FROM (SELECT * from Availability WHERE",
+                    "(SELECT lid, avg(price) AS avg, min(price) AS min, max(price) AS max FROM (SELECT * from Availability WHERE not booked AND ",
                     "date >= %s",
                     ") AS R GROUP BY lid) AS T",
                 ]
@@ -376,12 +383,12 @@ def print_listing_amenities(lid):
             print("   -  ", row[0])
 
 
-@error_notif()
+@error_notif(default={})
 def display_bookings(sin, is_past):
     curr_date = utils.date_to_str(date.today())
     get_bookings = ("SELECT bid, start_date, end_date, name, streetnum, streetname, city, country, zipcode, btype" +
                     " from Listing NATURAL JOIN User NATURAL JOIN (SELECT bid, lid, sin AS rsin, start_date, end_date from Booking WHERE sin = %s" +
-                    " AND status = 'ACTIVE' AND start_date")
+                    " AND status = 'ACTIVE' AND end_date")
     if (is_past):
         get_bookings += " < %s) AS R"
         timing = "PAST"
@@ -407,7 +414,7 @@ def display_bookings(sin, is_past):
     print("")
     return valid_ids
 
-
+@error_notif()
 def client_cancel_booking(valid_ids):
     bid = utils.get_answer("Enter a booking ID: ", validators.is_contained(valid_ids))
 
@@ -424,6 +431,17 @@ def client_cancel_booking(valid_ids):
         cursor = db.get_new_cursor()
         cursor.execute(cancel_booking, ('RENTER_CANCELLED', int(bid)))
         db.get_connection().commit()
+
+        get_booking = f"SELECT lid, start_date, end_date FROM Booking WHERE bid = {bid}"
+        cursor = db.get_new_cursor()
+        cursor.execute(get_booking)
+        params = cursor.fetchone()
+
+        update_availablity = ("UPDATE Availability SET booked = False WHERE lid = %s AND date >= %s and date <= %s")
+        cursor = db.get_new_cursor ()
+        cursor.execute(update_availablity, params)
+        db.get_connection().commit()
+
         notifications.set_notification("Booking cancelled successfully.")
 
 
@@ -515,7 +533,7 @@ def post_review(valid_ids):
             return
 
 
-        rating = int(utils.get_answer("Enter a rating from 1 to 5 (leave blank for none): ", validators.is_rating.or_blank))
+        rating = utils.get_answer("Enter a rating from 1 to 5 (leave blank for none): ", validators.is_rating.or_blank)
         comment = utils.get_answer("Enter a comment (leave blank for none): ", validators.is_string)
 
         params = confirm_responses([rating, comment], bid, existing_review)

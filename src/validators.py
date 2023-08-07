@@ -77,5 +77,9 @@ def yes_or_no(x :str):
 def in_range(lower:float, upper:float):
     @attr(f"Must be a number between {lower} and {upper}")
     def _in_range(x :str):
-        return is_int(x) and lower <= float(x) <= upper
+        return is_float(x) and lower <= float(x) <= upper
     return _in_range
+
+@attr("Must be a 16-digit number")
+def is_valid_cc(cc: str):
+    return cc.isnumeric() and len(cc) == 16

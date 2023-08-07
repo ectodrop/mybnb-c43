@@ -27,7 +27,7 @@ def bookings_by_city():
     cursor = db.get_new_cursor()
     cursor.execute(report, args)
     (count, ) = cursor.fetchone()
-    print(f"Number of bookings in {city} {zipcode}\nDate range {start} to {end}...\n{count} bookings(s) found")
+    print(f"Number of bookings in {city} {zipcode}\nDate range {start} to {end}...\n{count} booking(s) found")
     input("Press Enter to continue: ")
 
 # number of listings per country
