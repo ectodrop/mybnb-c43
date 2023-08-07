@@ -6,7 +6,7 @@ from views import View
 from datetime import date, timedelta
 from listing import get_bookings_dates, get_available_dates, is_booked, is_available
 import windows
-
+import validators
 
 @error_notif()
 def create_booking(sin, lid):
@@ -38,7 +38,7 @@ def create_booking(sin, lid):
 
     print("Total price of booking: $" + str(price))
     print("Confirm booking of this listing from " + start_date + " to " + end_date + "?")
-    choice = input("Enter (y/n): ")
+    choice = utils.get_answer("Enter (y/n): ", validators.yes_or_no)
     if choice == "n":
         notifications.set_notification("Booking failed.")
         return
@@ -50,10 +50,9 @@ def create_booking(sin, lid):
     cursor = db.get_new_cursor()
     cursor.execute(retrieve_user, (sin,))
     (creditcard,) = cursor.fetchone()
-
-    while not creditcard:
-        print("Please enter your credit card number: ")
-        creditcard = input("Credit Card Number : ")
+    if not creditcard:
+        print("Please enter your 16-digit credit card number: ")
+        creditcard = utils.get_answer("Credit Card Number : ", validators.is_valid_cc)
 
     update_user = ("UPDATE User SET creditcard = %s WHERE sin = %s")
     cursor = db.get_new_cursor()
@@ -66,10 +65,16 @@ def create_booking(sin, lid):
     cursor.execute(insert_booking, params)
     db.get_connection().commit()
 
+    update_availablity = ("UPDATE Availability SET booked = True WHERE lid = %s AND date >= %s and date <= %s")
+    params = (lid, start_date, end_date)
+    cursor = db.get_new_cursor ()
+    cursor.execute(update_availablity, params)
+    db.get_connection().commit()
+
     notifications.set_notification("Booking created successfully.")
 
 
-@error_notif()
+@error_notif(default=[])
 def print_amenities_list():
     print("AMENITIES")
     amenities = ["Wifi", "TV", "Kitchen", "Washer", "AC", "Free Parking", "Paid Parking", "Dedicated Workspace", 
@@ -96,19 +101,16 @@ def listing_info(sin, lid):
 
 @error_notif()
 def listing_options(sin, valid_ids):
-    questions = [
-        "Enter a listing ID: "
-    ]
-    [lid] = utils.display_form(questions)
+    lid = utils.get_answer("Enter a listing ID (enter blank to cancel): ", validators.is_contained(valid_ids).or_blank)
 
-    if (int(lid) not in valid_ids):
-        notifications.set_notification("Listing ID not present in search results. Please try again.")
+    if lid == "":
+        notifications.set_notification("Cancelled")
     else:
         print("Listing Information")
         listing_info(sin, int(lid))
 
 
-@error_notif()
+@error_notif(default={})
 def display_listings(get_listings, answers, show_distance):
     cursor = db.get_new_cursor()
     cursor.execute(get_listings, tuple(answers))
@@ -135,40 +137,36 @@ def display_listings(get_listings, answers, show_distance):
     return valid_ids
 
 
+@error_notif(default=("", []))
 def filter_search(search_query, original, for_distance):
     additional_query = "date >= %s"
     tmr_date = utils.date_to_str(date.today() + timedelta(1))
     additional_params = [tmr_date]
-    choice = input("Filter by availability? Input (y/n): ")
+    choice = utils.get_answer("Filter by availability? Input (y/n): ", validators.yes_or_no)
     if (choice == "y"):
-        questions = ["Enter the start date of availabilities (YYYY-MM-DD): ", "Enter the end date of availabilities (YYYY-MM-DD): "]
-        dates = utils.display_form(questions)
+        start, end = windows.display_calendar([],[])
         additional_query += " AND date <= %s"
-        additional_params = dates
-    elif (choice != "n"):
-        print("Invalid entry.")
+        additional_params = [start, end]
 
-    choice = input("Filter by price? Input (y/n): ")
+    choice = utils.get_answer("Filter by price? Input (y/n): ", validators.yes_or_no)
     if (choice == "y"):
-        questions = ["Enter the minimum price per day: ", "Enter the maximum price per day: "]
+        questions = [("Enter the minimum price per day: ", validators.is_int), ("Enter the maximum price per day: ", validators.is_int)]
         [min_price, max_price] = utils.display_form(questions)
         additional_query += " AND price >= %s AND price <= %s"
         additional_params += [float(min_price), float(max_price)]
-    elif (choice != "n"):
-        print("Invalid entry.")
     
     search_query[3] = additional_query
     original[3] = additional_query
 
-    choice = input("Filter by amenities? Input (y/n): ")
+    choice = utils.get_answer("Filter by amenities? Input (y/n): ", validators.yes_or_no)
     if (choice == "y"):
         notifications.set_notification("Displaying results with updated filters.")
         amenities = print_amenities_list()
         selected = []
-        choice = int(input("Select amenities (enter 0 to submit the list): "))
+        choice = int(utils.get_answer("Select amenities (enter 0 to submit the list): ", validators.in_range(0, len(amenities))))
         while choice > 0 and choice <= len(amenities):
             selected.append(amenities[choice - 1])
-            choice = int(input("Select amenities (enter 0 to submit the list): "))
+            choice = int(utils.get_answer("Select amenities (enter 0 to submit the list): ", validators.in_range(0, len(amenities))))
         if (choice > len(amenities) or choice < 0):
             print("Invalid entry.")
 
@@ -232,16 +230,16 @@ def search_by_addr(sin):
     tmr_date = utils.date_to_str(date.today() + timedelta(1))
     print("Searching by Address")
     questions = [
-        "Enter the street # (leave blank for any): ",
-        "Enter the street name (leave blank for any): ",
-        "Enter the city (leave blank for any): ",
-        "Enter the country (leave blank for any): ",
-        "Enter the zipcode (leave blank for any): "
+        ("Enter the street # (leave blank for any): ", validators.is_int.or_blank),
+        ("Enter the street name (leave blank for any): ", validators.is_string),
+        ("Enter the city (leave blank for any): ", validators.is_string),
+        ("Enter the country (leave blank for any): ", validators.is_string),
+        ("Enter the zipcode (leave blank for any): ", validators.is_zipcode.or_blank)
     ]
     [streetnum, streetname, city, country, zipcode] = utils.display_form(questions)
     original = ["SELECT lid, streetnum, streetname, city, country, zipcode, btype, name, avg, min, max FROM",
                     "(SELECT * FROM Listing NATURAL JOIN User WHERE sin != " + str(sin) + " AND (streetnum = %s OR %s = '') AND (streetname = %s OR %s = '') AND (city = %s OR %s = '') AND (country = %s OR %s = '') AND (zipcode = %s OR %s = '')) AS S NATURAL JOIN",
-                    "(SELECT lid, avg(price) AS avg, min(price) AS min, max(price) AS max FROM (SELECT * from Availability WHERE",
+                    "(SELECT lid, avg(price) AS avg, min(price) AS min, max(price) AS max FROM (SELECT * from Availability WHERE not booked AND ",
                     "date >= %s",
                     ") AS R GROUP BY lid) AS T",
                 ]
@@ -254,13 +252,10 @@ def search_by_zipcode(sin):
     utils.clear_screen()
     tmr_date = utils.date_to_str(date.today() + timedelta(1))
     print("Searching by Zipcode")
-    questions = [
-        "Enter a zipcode: "
-    ]
-    [zipcode] = utils.display_form(questions)
+    zipcode = utils.get_answer("Enter a zipcode: ", validators.is_zipcode)
     original = ["SELECT lid, streetnum, streetname, city, country, zipcode, btype, name, avg, min, max FROM",
                     "(SELECT * FROM Listing NATURAL JOIN User WHERE sin != " + str(sin) + ''' AND zipcode like %s"___") AS S NATURAL JOIN''',
-                    "(SELECT lid, avg(price) AS avg, min(price) AS min, max(price) AS max FROM (SELECT * from Availability WHERE",
+                    "(SELECT lid, avg(price) AS avg, min(price) AS min, max(price) AS max FROM (SELECT * from Availability WHERE not booked AND ",
                     "date >= %s",
                     ") AS R GROUP BY lid) AS T"
                 ]
@@ -274,15 +269,15 @@ def search_by_location(sin):
     tmr_date = utils.date_to_str(date.today() + timedelta(1))
     print("Searching by Location")
     questions = [
-        "Enter a longitude: ",
-        "Enter a latitude: ",
-        "Enter a radius of search (leave blank for a default of 50 km): "
+        ("Enter a longitude: ", validators.is_float),
+        ("Enter a latitude: ", validators.is_float),
+        ("Enter a radius of search (leave blank for a default of 50 km): ", validators.is_float.or_blank)
     ]
     [longi, lati, dist] = utils.display_form(questions)
     dist_params = [float(lati), float(lati), float(longi), float(dist) if dist else 50.0 ]
     original = ["SELECT lid, streetnum, streetname, city, country, zipcode, btype, name, avg, min, max, 12742*temp*sin(SQRT(temp)) AS distance FROM",
                     "(SELECT lid, streetnum, streetname, city, country, zipcode, btype, name, POWER(sin((latitude - %s)/2), 2) + cos(latitude)*cos(%s)*POWER(sin((longitude - %s)/2), 2) AS temp FROM Listing NATURAL JOIN User WHERE sin != " + str(sin) + ") AS S NATURAL JOIN",
-                    "(SELECT lid, avg(price) AS avg, min(price) AS min, max(price) AS max FROM (SELECT * from Availability WHERE",
+                    "(SELECT lid, avg(price) AS avg, min(price) AS min, max(price) AS max FROM (SELECT * from Availability WHERE not booked AND ",
                     "date >= %s",
                     ") AS R GROUP BY lid) AS T",
                     "WHERE 12742*temp*sin(SQRT(temp)) <= %s",
@@ -293,7 +288,7 @@ def search_by_location(sin):
     search_loop(sin, original, original_params, True)
 
 
-@error_notif()
+@error_notif(default=False)
 def sort_by_price(search_query, sorted, for_distance):
     utils.clear_screen()
     print("Please select an option: ")
@@ -329,7 +324,7 @@ def browse_listings(sin):
     utils.clear_screen()
     search_query = ["SELECT DISTINCT lid, streetnum, streetname, city, country, zipcode, btype, name, avg, min, max FROM",
                     "(SELECT * FROM Listing NATURAL JOIN User WHERE sin != " + str(sin) + ") AS S NATURAL JOIN",
-                    "(SELECT lid, avg(price) AS avg, min(price) AS min, max(price) AS max FROM (SELECT * from Availability WHERE",
+                    "(SELECT lid, avg(price) AS avg, min(price) AS min, max(price) AS max FROM (SELECT * from Availability WHERE not booked AND ",
                     "date >= %s",
                     ") AS R GROUP BY lid) AS T",
                 ]
@@ -351,21 +346,21 @@ def browse_listings(sin):
             print("6. Filter all listings")
             print("7. Order listings by average price")
         choice = input("Enter a choice: ")
-
-        if choice == "2" and valid_ids:
-            listing_options(sin, valid_ids)
-        elif choice == "3" and valid_ids:
-            search_by_location(sin)
-        elif choice == "4" and valid_ids:
-            search_by_zipcode(sin)
-        elif choice == "5" and valid_ids:
-            search_by_addr(sin)
-        elif choice == "6" and valid_ids:
-            search_query, answers = filter_search(search_query, original, False)
-        elif choice == "7" and valid_ids:
-            sorted = sort_by_price(search_query, sorted, False)
-        elif choice == "1":
+        if choice == "1":
             return
+        elif valid_ids:
+            if choice == "2":
+                listing_options(sin, valid_ids)
+            elif choice == "3":
+                search_by_location(sin)
+            elif choice == "4":
+                search_by_zipcode(sin)
+            elif choice == "5":
+                search_by_addr(sin)
+            elif choice == "6":
+                search_query, answers = filter_search(search_query, original, False)
+            elif choice == "7":
+                sorted = sort_by_price(search_query, sorted, False) 
         else:
             notifications.set_notification("Invalid entry.")
         utils.clear_screen()
@@ -388,12 +383,12 @@ def print_listing_amenities(lid):
             print("   -  ", row[0])
 
 
-@error_notif()
+@error_notif(default={})
 def display_bookings(sin, is_past):
     curr_date = utils.date_to_str(date.today())
     get_bookings = ("SELECT bid, start_date, end_date, name, streetnum, streetname, city, country, zipcode, btype" +
                     " from Listing NATURAL JOIN User NATURAL JOIN (SELECT bid, lid, sin AS rsin, start_date, end_date from Booking WHERE sin = %s" +
-                    " AND status = 'ACTIVE' AND start_date")
+                    " AND status = 'ACTIVE' AND end_date")
     if (is_past):
         get_bookings += " < %s) AS R"
         timing = "PAST"
@@ -419,19 +414,16 @@ def display_bookings(sin, is_past):
     print("")
     return valid_ids
 
-
+@error_notif()
 def client_cancel_booking(valid_ids):
-    questions = [
-        "Enter a booking id: "
-    ]
-    [bid] = utils.display_form(questions)
+    bid = utils.get_answer("Enter a booking ID: ", validators.is_contained(valid_ids))
 
     if (int(bid) not in valid_ids):
         notifications.set_notification("Invalid booking ID. Please try again.")
         return
     else:
         print("Confirm cancellating of booking: ")
-        choice = input("Input (y/n): ")
+        choice = utils.get_answer("Input (y/n): ", validators.yes_or_no)
         if (choice != "y"):
             notifications.set_notification("Did not cancel booking.")
             return
@@ -439,6 +431,17 @@ def client_cancel_booking(valid_ids):
         cursor = db.get_new_cursor()
         cursor.execute(cancel_booking, ('RENTER_CANCELLED', int(bid)))
         db.get_connection().commit()
+
+        get_booking = f"SELECT lid, start_date, end_date FROM Booking WHERE bid = {bid}"
+        cursor = db.get_new_cursor()
+        cursor.execute(get_booking)
+        params = cursor.fetchone()
+
+        update_availablity = ("UPDATE Availability SET booked = False WHERE lid = %s AND date >= %s and date <= %s")
+        cursor = db.get_new_cursor ()
+        cursor.execute(update_availablity, params)
+        db.get_connection().commit()
+
         notifications.set_notification("Booking cancelled successfully.")
 
 
@@ -478,7 +481,7 @@ def confirm_responses(responses, bid, existing_review):
 
     for i in  range(2):
         print("Replace new", types[i], "with previous", types[i] + "?")
-        choice = input("Input (y/n): ")
+        choice = utils.get_answer("Input (y/n): ", validators.yes_or_no)
         if (choice == "y"):
             params.append(responses[i])
         elif (choice == "n"):
@@ -491,12 +494,8 @@ def confirm_responses(responses, bid, existing_review):
 
 @error_notif()
 def post_review(valid_ids):
-    questions = [
-        "Enter a booking ID: ",
-        "Enter a rating from 1 to 5 (leave blank for none): ",
-        "Enter a comment (leave blank for none): "
-    ]
-    [bid] = utils.display_form(questions[:1])
+    bid = utils.get_answer("Enter a booking ID: ", validators.is_contained(valid_ids))
+
     if (int(bid) not in valid_ids):
         notifications.set_notification("Invalid booking ID. Please try again.")
         return
@@ -518,6 +517,7 @@ def post_review(valid_ids):
         print("Please select an option: ")
         print("1. Update review for host")
         print("2. Update review for listing")
+        print("3. Return to all past bookings")
         choice = input("Enter a choice: ")
         if choice == "1":
             update_review = ("UPDATE Booking SET renter_host_rating = %s, renter_host_comment = %s WHERE bid = %s")
@@ -525,15 +525,16 @@ def post_review(valid_ids):
         elif choice == "2":
             update_review = ("UPDATE Booking SET renter_listing_rating = %s, renter_listing_comment = %s WHERE bid = %s")
             existing_review = (listing_rating, listing_comment)
+        elif choice == "3":
+            notifications.set_notification("Back to viewing past bookings.")
+            return
         else:
             notifications.set_notification("Invalid entry.")
             return
 
 
-        rating = 0
-        while rating > 5 or rating < 1:
-            rating = int(input(questions[1]))
-        comment = input(questions[2])
+        rating = utils.get_answer("Enter a rating from 1 to 5 (leave blank for none): ", validators.is_rating.or_blank)
+        comment = utils.get_answer("Enter a comment (leave blank for none): ", validators.is_string)
 
         params = confirm_responses([rating, comment], bid, existing_review)
 

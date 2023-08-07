@@ -48,6 +48,7 @@ create table Availability(
 	date date not null,
 	lid int not null,
     price float(2) not null,
+    booked boolean not null DEFAULT FALSE,
     PRIMARY KEY (date, lid),
     FOREIGN KEY (lid) REFERENCES Listing(lid) ON DELETE CASCADE
 );

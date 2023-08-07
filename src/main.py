@@ -55,8 +55,7 @@ def client_dashboard(sin):
   elif choice == "5":
     return View.WELCOME
   elif choice == "10":
-    user.delete_account(sin)
-    return View.WELCOME
+    return user.delete_account(sin, View.CLIENT_DASH)
   else:
     notifications.set_notification("Invalid entry.")
   
@@ -88,8 +87,7 @@ def host_dashboard(sin):
   elif choice == "5":
     return View.WELCOME
   elif choice == "10":
-    user.delete_account(sin)
-    return View.WELCOME
+    return user.delete_account(sin, View.HOST_DASH)
   else:
     notifications.set_notification("Invalid entry.")
     return View.HOST_DASH
@@ -99,13 +97,12 @@ def manage_listing(lid):
   print("1. Add availablity")
   print("2. Adjust pricing")
   print("3. Remove availability")
-  print("4. View bookings")
-  print("5. Cancel booking")
+  print("4. Manage past bookings")
+  print("5. Manage current bookings")
   print("6. Remove listing")
   print("7. Add Amenity")
   print("8. Remove Amenity")
-  print("9. Add Review for Renter")
-  print("10. Return to host menu")
+  print("9. Return to host menu")
   choice = input("Enter a choice: ")
 
   if choice == "1":
@@ -115,10 +112,9 @@ def manage_listing(lid):
   elif choice == "3":
     listing.update_availablity(lid, remove=True)
   elif choice == "4":
-    listing.display_bookings(lid)
-    input("Press Enter to continue ")
+    return View.LISTING_PAST_BOOKINGS
   elif choice == "5":
-    listing.host_cancel_booking(lid)
+    return View.LISTING_CURRENT_BOOKINGS
   elif choice == "6":
     return listing.remove_listing(lid)
   elif choice == "7":
@@ -126,12 +122,43 @@ def manage_listing(lid):
   elif choice == "8":
     listing.remove_amenity(lid)
   elif choice == "9":
-    listing.review_renter(lid)
-  elif choice == "10":
     return View.HOST_DASH
   else:
     notifications.set_notification("Invalid entry")
   return View.LISTING
+
+def host_manage_past_bookings(lid):
+  print(f"PAST BOOKINGS FOR LISTING#{lid}")
+  valid_ids = listing.display_bookings(lid, past=True)
+  print("\n1. Return to listing options")
+  print("2. Display cancelled bookings")
+  if valid_ids:
+    print("3. Add/Edit a review for a past renter")
+  choice = input("Enter a choice: ")
+
+  if choice == "1":
+    return View.LISTING
+  elif choice == "2":
+    listing.display_cancelled_bookings(lid)
+  elif valid_ids:
+    if choice == "3":
+      listing.host_review_renter(valid_ids)
+  return View.LISTING_PAST_BOOKINGS
+
+def host_manage_current_bookings(lid):
+  print(f"CURRENT BOOKINGS FOR LISTING#{lid}")
+  valid_ids = listing.display_bookings(lid, past=False)  
+  print("\n1. Return to listing options")
+  if valid_ids:
+    print("2. Cancel a Booking")
+  choice = input("Enter a choice: ")
+  
+  if choice == "1":
+    return View.LISTING
+  elif valid_ids:
+    if choice == "2":
+      listing.host_cancel_booking(valid_ids)
+  return View.LISTING_CURRENT_BOOKINGS
 
 def display_reports():
   print("REPORTS")
@@ -210,6 +237,12 @@ def main ():
     
     elif cur_view == View.LISTING:
       cur_view = manage_listing(lid)
+    
+    elif cur_view == View.LISTING_PAST_BOOKINGS:
+      cur_view = host_manage_past_bookings(lid)
+    
+    elif cur_view == View.LISTING_CURRENT_BOOKINGS:
+      cur_view = host_manage_current_bookings(lid)
     
     elif cur_view == View.REPORTS:
       cur_view = display_reports()
