@@ -25,8 +25,8 @@ def create_listing(sin):
                "VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s)")
     
     questions = [
-        ("Enter the longitude: ", validators.in_range(-90, 90)),
-        ("Enter the latitude: ", validators.in_range(-180, 180)),
+        ("Enter the longitude: ", validators.in_range(-180, 180)),
+        ("Enter the latitude: ", validators.in_range(-90, 90)),
         ("Enter the street #: ", validators.is_int),
         ("Enter the street name: ", validators.non_empty),
         ("Enter the city: ", validators.non_empty),

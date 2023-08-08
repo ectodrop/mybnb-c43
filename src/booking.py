@@ -145,8 +145,9 @@ def filter_search(search_query, original, for_distance):
     choice = utils.get_answer("Filter by availability? Input (y/n): ", validators.yes_or_no)
     if (choice == "y"):
         start, end = windows.display_calendar([],[])
-        additional_query += " AND date <= %s"
-        additional_params = [start, end]
+        if start != None and end != None:
+            additional_query += " AND date <= %s"
+            additional_params = [start, end]
 
     choice = utils.get_answer("Filter by price? Input (y/n): ", validators.yes_or_no)
     if (choice == "y"):
@@ -269,8 +270,8 @@ def search_by_location(sin):
     tmr_date = utils.date_to_str(date.today() + timedelta(1))
     print("Searching by Location")
     questions = [
-        ("Enter a longitude: ", validators.is_float),
-        ("Enter a latitude: ", validators.is_float),
+        ("Enter a longitude: ", validators.in_range(-180, 180)),
+        ("Enter a latitude: ", validators.in_range(-90, 90)),
         ("Enter a radius of search (leave blank for a default of 50 km): ", validators.is_float.or_blank)
     ]
     [longi, lati, dist] = utils.display_form(questions)

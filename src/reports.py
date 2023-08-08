@@ -169,7 +169,7 @@ def rank_renter_by_cancel():
 # print renters by number of bookings cancelled
 @error_notif()
 def rank_host_by_cancel():
-    report = ("SELECT l.sin, COUNT(*) FROM Booking as b INNER JOIN Listing as l ON b.lid = l.lid "
+    report = ("SELECT l.sin, name, COUNT(*) FROM Booking as b INNER JOIN (SELECT * FROM Listing NATURAL JOIN User) as l ON b.lid = l.lid "
               "WHERE status='HOST_CANCELLED' GROUP BY l.sin ORDER BY COUNT(*)")
     cursor = db.get_new_cursor()
     cursor.execute(report)
@@ -178,8 +178,8 @@ def rank_host_by_cancel():
         notifications.set_notification("No host cancellations found!")
         return
     print("HOSTS: #CANCELLED")
-    for sin, count in result:
-        print(f"  {sin}: {count}")
+    for sin, name, count in result:
+        print(f"  {sin} {name}: {count}")
     input("Press Enter to continue: ")
 
 # generate a list of popular nouns used in each listing's reviews

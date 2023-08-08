@@ -40,7 +40,7 @@ Follows A#B#C# format
 @attr("Must be of the format A#A#A#")
 def is_zipcode(x :str):
     is_zipcode.err = "Must enter a string in A#A#A# format"
-    return bool(re.search("[a-zA-Z]\d[a-zA-Z]\d[a-zA-Z]\d", x))
+    return bool(re.search("[A-Z]\d[A-Z]\d[A-Z]\d", x))
 
 """
 check if input var is in container
